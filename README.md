@@ -24,8 +24,8 @@ everywhere. The extension gates each tool on what is actually present:
 | | |
 | --- | --- |
 | **Missing binary** | the tool is badged with what to install |
-| **`libvirtd` stopped** | badge with a **Start** button |
-| **Not in the `docker` group** | badge with an **Add me** button |
+| **libvirt not answering** | badge naming the connection URI and what to check |
+| **Not in the `libvirt` or `docker` group** | badge with an **Add me** button |
 
 KVM acceleration needs VT-x/AMD-V enabled in your BIOS/UEFI. Without it libvirt
 still works, but VMs fall back to plain emulation and run very slowly.
@@ -34,9 +34,13 @@ still works, but VMs fall back to plain emulation and run very slowly.
 
 | Tool | What it covers |
 | --- | --- |
-| **virsh** | VM lifecycle — start, shutdown, suspend, reboot, destroy, undefine, viewer — plus snapshot create/revert/delete |
-| **Images & VM creation** | download an image into the images directory, create a VM from an ISO (`virt-install`), or import an existing qcow2 |
-| **virsh networks** | list/start/stop libvirt networks, create NAT / host-only / isolated networks, and toggle IP forwarding |
+| **virsh** | VM lifecycle — start, shutdown, suspend, reboot, autostart, save/restore, console and viewer — plus inspect, XML editing and a two-step armed delete |
+| **VM snapshots** | list as a table, create (disk-only, quiesced, atomic, halt), revert, delete with or without children, and edit snapshot XML |
+| **VM hardware & devices** | attach/detach disks and interfaces, change CD-ROM media, set vCPUs and memory, and read per-device statistics |
+| **Images & VM creation** | browse the pool's images without root, download an ISO, create a VM from one (`virt-install`) or import an existing qcow2 — with an XML dry run |
+| **virsh networks** | list/start/stop libvirt networks, create NAT / host-only / isolated networks, inspect ports and leases, and toggle IP forwarding |
+| **Storage pools & volumes** | list pools and volumes with capacity, create/resize/clone/upload volumes, define and build pools, and armed deletion |
+| **Host & capabilities** | libvirt and hypervisor versions, host CPU/memory, guest capabilities, NUMA free pages and host devices for passthrough |
 | **Docker containers** | run a throwaway container, then list, start/stop/kill, exec a shell, follow logs, copy files out and remove — listings render as sortable tables |
 | **Docker images** | list, pull, tag, push, build from a Dockerfile, layer history, save/load a tar, disk usage and pruning |
 | **Docker networks** | list/inspect, create bridge / macvlan / ipvlan / overlay networks, connect and disconnect containers |
@@ -92,9 +96,10 @@ cd ~/.virt-toolbox && git pull && npm install && npm run package \
 3. Press **`Ctrl+Alt+V`** (`Cmd+Alt+V` on macOS) to fuzzy-find any tool by name, or
    browse the tree. Star tools to pin them to **Favorites**.
 4. Fill in the form and review the resolved command.
-5. **Run** — `virsh` and `virt-install` need root and are interactive, so they run
-   in an integrated terminal where the `sudo` prompt works. Every run is saved to
-   **Run History** (the history icon in the Tools title bar).
+5. **Run** — listings are captured and rendered as sortable tables. Anything that
+   needs a real terminal (a console, an editor, VM creation, the few actions that
+   still need `sudo`) opens one. Every run is saved to **Run History** (the history
+   icon in the Tools title bar).
 
 Each run executes in `~/.virt-toolbox/outputs/<tool>/`, and any output file lands
 there. Point **`virtToolbox.outputsPath`** somewhere else to keep runs beside a

@@ -40,10 +40,29 @@ interface Session {
 // Curated quick-launch set for the home dashboard. Filtered against the registry
 // so a removed tool just drops out. Recently-run tools are prepended ahead of
 // these at build time.
-const QUICK_TOOL_IDS = ["virsh", "virt-images", "virt-net", "docker", "docker-compose", "docker-images"];
+// Interleaved on purpose: favorites and recents are prepended and the whole list
+// is sliced to 10, so alternating the two domains keeps a 10-slice from hiding
+// one of them entirely. The tree lists all twelve regardless.
+const QUICK_TOOL_IDS = [
+  "virsh",
+  "docker",
+  "virsh-snapshots",
+  "docker-compose",
+  "virsh-pools",
+  "docker-images",
+  "virt-net",
+  "docker-networks",
+  "virt-images",
+  "virsh-devices",
+  "virsh-host",
+  "docker-volumes",
+];
 
 // The config keys surfaced on the dashboard's card (label → key).
 const HOME_CONFIG: { label: string; key: string }[] = [
+  // VIRSH_BIN earns dashboard space because it is the one key that changes HOW
+  // everything runs; VIRT_INSTALL_BIN stays in the config view only.
+  { label: "virsh CLI (VIRSH_BIN)", key: "VIRSH_BIN" },
   { label: "Connection URI (LIBVIRT_URI)", key: "LIBVIRT_URI" },
   { label: "Images directory (IMAGES_DIR)", key: "IMAGES_DIR" },
   { label: "Default network (DEFAULT_NET)", key: "DEFAULT_NET" },

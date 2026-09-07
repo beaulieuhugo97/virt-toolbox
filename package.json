@@ -1,8 +1,8 @@
 {
   "name": "virt-toolbox",
   "displayName": "Virtualization Toolbox",
-  "description": "Drive libvirt/KVM and Docker from guided VS Code forms — list, create (virt-install), snapshot and manage virsh VMs, wire up libvirt networks, and work through Docker containers, images, networks, volumes and Compose stacks as sortable listings. Review the exact command, then run it.",
-  "version": "1.0.0",
+  "description": "Drive libvirt/KVM and Docker from guided VS Code forms — manage VMs, snapshots, hardware, storage pools, volumes, networks and host capabilities with virsh, and Docker containers, images, networks, volumes and Compose stacks. Listings render as sortable tables; review the exact command, then run it.",
+  "version": "1.1.0",
   "publisher": "hugoquebec",
   "license": "SEE LICENSE IN LICENSE.md",
   "icon": "media/icon-128.png",
@@ -36,7 +36,11 @@
     "docker",
     "containers",
     "compose",
-    "podman"
+    "podman",
+    "qemu",
+    "snapshots",
+    "storage-pools",
+    "virt-install"
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
@@ -220,7 +224,7 @@
           {
             "id": "virsh",
             "title": "Manage your VMs",
-            "description": "Open the virsh tool to list, start, snapshot and manage libvirt VMs. The libvirtd badge shows whether the service is running (with a Start button).\n[Open the virsh tool](command:virtToolbox.openTool?%5B%22virsh%22%5D)",
+            "description": "Open the virsh tool to list, start and manage libvirt VMs. Listings render as sortable tables, and the badges probe virsh itself rather than a systemd unit.\n[Open the virsh tool](command:virtToolbox.openTool?%5B%22virsh%22%5D)",
             "media": {
               "markdown": "media/walkthrough/virsh.md"
             },
@@ -231,7 +235,7 @@
           {
             "id": "run",
             "title": "Review & run the command",
-            "description": "Fill in the form, review the exact command the toolbox will run, then Run. Interactive libvirt commands run in a real terminal so sudo prompts work.\n[Open the dashboard](command:virtToolbox.home)",
+            "description": "Fill in the form, review the exact command the toolbox will run, then Run. Listings are captured into sortable tables; consoles, editors and VM creation run in a real terminal.\n[Open the dashboard](command:virtToolbox.home)",
             "media": {
               "markdown": "media/walkthrough/run.md"
             }

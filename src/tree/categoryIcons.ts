@@ -7,6 +7,8 @@ const ICONS: Record<string, string> = {
   Container: "package",
   Networking: "radio-tower",
   Images: "device-desktop",
+  Storage: "database",
+  Host: "server",
 };
 
 /** Codicon id for a category, by its last path segment. Falls back to a folder. */
