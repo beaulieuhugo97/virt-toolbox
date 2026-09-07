@@ -60,16 +60,14 @@ ok("the form asks the host to resolve its commands", posted.some((m) => m.type =
 // ── missing-file warning ──────────────────────────────────────────────────────
 send({
   type: "resolved",
-  commands: { dir: { command: "gobuster dir -u http://box.htb -w /home/u/.pentest-toolbox/wordlists/discovery-wordlist.txt" } },
+  commands: { dir: { command: "sudo virt-install --disk path=/var/lib/libvirt/images/pwnbox.qcow2" } },
   notes: [],
-  fileWarnings: [{ fieldId: "wordlist", path: "/home/u/.pentest-toolbox/wordlists/discovery-wordlist.txt", isWordlist: true }],
+  fileWarnings: [{ fieldId: "wordlist", path: "/var/lib/libvirt/images/pwnbox.qcow2" }],
 });
 const warning = $('.field[data-field="wordlist"] .field-warn');
-ok("a missing wordlist warns under its own field", !!warning);
-ok("the warning names the file that is missing", !!warning?.textContent?.includes("discovery-wordlist.txt"));
+ok("a missing file warns under its own field", !!warning);
+ok("the warning names the file that is missing", !!warning?.textContent?.includes("pwnbox.qcow2"));
 eq("only the offending field is flagged", $$(".field-warn").length, 1);
-click([...(warning?.querySelectorAll("button") ?? [])].find((b) => b.textContent === "Download wordlists"));
-eq("the warning's button opens the wordlists panel", lastPosted("openTool")?.toolId, "wordlists-download");
 
 send({ type: "resolved", commands: { dir: { command: "x" } }, notes: [], fileWarnings: [] });
 eq("the warning clears once the file is there", $$(".field-warn").length, 0);
@@ -143,16 +141,15 @@ ok("no banner on an attack box", !$(".host-banner"));
 // ── the views these changes touch in passing ──────────────────────────────────
 send({
   type: "showConfig",
-  groups: [{ title: "Remote", items: [
-    { label: "Remote Host", key: "RHOST", type: "text", validation: "required" },
-    { label: "Local Port", key: "LPORT", type: "port", validation: "port" },
-    { label: "Password Wordlist", key: "PASS_WORDLIST_FILE", type: "text", validation: "optional" },
+  groups: [{ title: "Libvirt", items: [
+    { label: "Connection URI", key: "LIBVIRT_URI", type: "text", validation: "required" },
+    { label: "Images directory", key: "IMAGES_DIR", type: "path", validation: "required" },
+    { label: "Default network", key: "DEFAULT_NET", type: "text", validation: "optional" },
   ] }],
-  values: { RHOST: "box.htb", LPORT: "1337", PASS_WORDLIST_FILE: "" },
+  values: { LIBVIRT_URI: "qemu:///system", IMAGES_DIR: "/var/lib/libvirt/images", DEFAULT_NET: "" },
   interfaces: [],
 });
-// "port" validates as a port but is still a value the tool needs.
-eq("config marks required and port keys as required", $$(".field > label .req").length, 2);
+eq("config marks required keys as required", $$(".field > label .req").length, 2);
 eq("config marks optional keys", $$(".field > label .opt").length, 1);
 send({ type: "showHistory", entries: [] });
 ok("run history still renders", appText().includes("Run History"));

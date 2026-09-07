@@ -312,8 +312,8 @@
       control.appendChild(box);
       control.appendChild(el("span", { text: " " + (f.help || f.label) }));
     } else if (f.type === "interface") {
-      // Tool-level interface fields yield the device NAME (e.g. eth0 for tcpdump -i),
-      // unlike the config LIP picker which stores the IP.
+      // Tool-level interface fields yield the device NAME (e.g. virbr0 for a
+      // bridge), not the address.
       control = el("select", { id: "f_" + f.id, onchange: (e) => commit(e.target.value) });
       interfaces.forEach((i) => {
         const opt = el("option", { value: i.name, text: i.name + " — " + i.address });
@@ -436,9 +436,8 @@
   }
 
   // Paths that don't exist yet, keyed by field id — the host recomputes these on
-  // every resolve. A missing default wordlist is the common case, and it would
-  // otherwise only surface as a bare "no such file" once the tool ran, so the
-  // warning carries the fix (open the wordlists panel) with it.
+  // every resolve. A missing ISO or disk image would otherwise only surface as a
+  // bare "no such file" once the tool ran, so the form says so up front.
   function applyFileWarnings(warnings) {
     for (const id in fieldEls) {
       const existing = fieldEls[id].wrapper.querySelector(".field-warn");
@@ -450,25 +449,9 @@
       const box = el("div", { class: "field-warn" });
       box.appendChild(el("span", { class: "field-warn-ico", text: "⚠" }));
       const body = el("div", { class: "field-warn-body" });
-      body.appendChild(
-        el("div", {
-          text: w.isWordlist
-            ? "This wordlist has not been downloaded yet — the run would fail."
-            : "This file does not exist — the run would fail.",
-        })
-      );
+      body.appendChild(el("div", { text: "This file does not exist — the run would fail." }));
       body.appendChild(el("code", { class: "field-warn-path", text: w.path }));
       box.appendChild(body);
-      if (w.isWordlist) {
-        box.appendChild(
-          el("button", {
-            class: "gate-btn",
-            type: "button",
-            text: "Download wordlists",
-            onclick: () => vscode.postMessage({ type: "openTool", toolId: "wordlists-download" }),
-          })
-        );
-      }
       entry.wrapper.appendChild(box);
     });
   }

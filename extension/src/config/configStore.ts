@@ -5,9 +5,9 @@ import { CONFIG_DEFAULTS, CONFIG_KEYS } from "./configMenus";
 const STATE_PREFIX = "virtToolbox.config.";
 
 /**
- * The single source of truth for injected config values (LIP/RHOST/wordlists…).
- * Persisted to VS Code workspace state (GUI-only; the gum TUI keeps its own
- * config.env — see PLAN.md open question #1, resolved to workspace state).
+ * The single source of truth for injected config values (the libvirt URI, images
+ * directory and default network). Persisted to VS Code workspace state (GUI-only;
+ * the bash TUI under scripts/ keeps its own config.env).
  */
 export class ConfigStore {
   private emitter = new vscode.EventEmitter<void>();
@@ -20,17 +20,11 @@ export class ConfigStore {
     return this.memento.get<string>(STATE_PREFIX + key);
   }
 
-  /** Resolve a single value: stored → default → derived (DOMAIN/DC_IP) → "". */
+  /** Resolve a single value: stored → default → "". */
   get(key: string): string {
     const stored = this.raw(key);
     if (stored !== undefined && stored !== "") {
       return expandHome(stored);
-    }
-    if (key === "DOMAIN") {
-      return this.get("RHOST");
-    }
-    if (key === "DC_IP") {
-      return this.get("RIP");
     }
     const def = CONFIG_DEFAULTS[key];
     return def !== undefined ? expandHome(def) : "";

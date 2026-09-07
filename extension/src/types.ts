@@ -46,7 +46,7 @@ export interface Field {
   /** Tab this field belongs to; omit for fields shown on every tab (global). */
   section?: string;
   help?: string;
-  /** Default value. May contain {CONFIG} tokens (e.g. "{RHOST}"), resolved host-side. */
+  /** Default value. May contain {CONFIG} tokens (e.g. "{IMAGES_DIR}"), resolved host-side. */
   default?: string;
   /** For select/segment. Accepts a label→value map, a {label,value}[], or a bare string[]. */
   options?: Record<string, string> | Option[] | string[];
@@ -57,7 +57,7 @@ export interface Field {
   required?: boolean;
   /** For `file`: pick a file or a folder. */
   fileKind?: "file" | "folder";
-  /** For `file`: config key whose value seeds the picker's start directory (e.g. "WORDLISTS_DIR"). */
+  /** For `file`: config key whose value seeds the picker's start directory (e.g. "IMAGES_DIR"). */
   rootConfig?: string;
 }
 

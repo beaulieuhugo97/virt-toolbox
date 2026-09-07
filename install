@@ -1,0 +1,454 @@
+#!/bin/bash
+
+# Virtualization Toolbox installer.
+#
+# Clones the repo, builds the VS Code extension from it and installs the VSIX.
+# The toolbox drives libvirt/KVM and docker, so it belongs on the machine that
+# *hosts* your VMs — any Linux with libvirt, not a particular distribution.
+
+# Strict mode
+set -euo pipefail
+IFS=$'\n\t'
+
+# Variables
+GIT_USER="beaulieuhugo97"
+GIT_REPO="virt-toolbox"
+INSTALL_DIR="$HOME/.virt-toolbox"
+EXT_ID="hugoquebec.virt-toolbox"
+VSIX_NAME="virt-toolbox.vsix"
+# What it takes to build the extension. The tools it *drives* are handled
+# separately by check_virt_stack — the extension itself badges anything missing.
+REQUIRED_DEPS=("git" "curl" "unzip" "npm")
+# Overridable so the distro-detection branches can be tested against fixtures.
+OS_RELEASE="${OS_RELEASE:-/etc/os-release}"
+
+# Filled in by detect_os. The commands are arrays, not strings: strict mode sets
+# IFS to \n\t, so an unquoted "sudo dnf install -y" would be run as a single
+# command name rather than split into words.
+DISTRO_NAME=""
+PKG_MGR=""
+PKG_INSTALL=()
+PKG_REFRESH=()
+# The virtualization stack, named per package manager — these differ far more
+# between distros than git/curl/unzip/npm do. Filled in by detect_package_manager.
+VIRT_PKGS=()
+
+# Progress. Every step announces itself before it runs, so a long build or clone
+# is never a silent pause — the installer says what it is doing and why.
+STEP_NO=0
+TOTAL_STEPS=8
+
+# Colored, sectioned output — only when writing to a terminal (skip codes when
+# piped, e.g. `curl … | bash` capturing logs).
+if [ -t 1 ]; then
+    C_RESET=$'\033[0m'; C_GREEN=$'\033[1;32m'; C_YELLOW=$'\033[1;33m'
+    C_RED=$'\033[1;31m'; C_BLUE=$'\033[1;36m'; C_DIM=$'\033[2m'; C_BOLD=$'\033[1m'
+else
+    C_RESET=""; C_GREEN=""; C_YELLOW=""; C_RED=""; C_BLUE=""; C_DIM=""; C_BOLD=""
+fi
+
+step() { STEP_NO=$((STEP_NO + 1)); printf '\n%s▸ [%d/%d] %s%s\n' "$C_BLUE" "$STEP_NO" "$TOTAL_STEPS" "$1" "$C_RESET"; }
+ok()   { printf '  %s✓ %s%s\n' "$C_GREEN" "$1" "$C_RESET"; }
+warn() { printf '  %s! %s%s\n' "$C_YELLOW" "$1" "$C_RESET"; }
+info() { printf '  %s%s%s\n' "$C_DIM" "$1" "$C_RESET"; }
+
+# Fail with an explanation and, where there is one, the fix.
+die() {
+    printf '\n%s✗ %s%s\n' "$C_RED" "$1" "$C_RESET"
+    shift
+    for line in "$@"; do
+        printf '  %s%s%s\n' "$C_DIM" "$line" "$C_RESET"
+    done
+    printf '\n'
+    exit 1
+}
+
+# A yes/no prompt.
+#
+# The terminal is read on fd 3 rather than stdin, because the documented way to
+# run this is `curl … | bash` — there stdin is the script itself, and reading the
+# answer from it would eat the rest of the script. /dev/tty is the real keyboard;
+# a plain `bash install` with no controlling terminal (CI, a container) falls
+# back to stdin, and with neither it takes $2 — "y" for the ordinary "shall I
+# continue" prompts, "n" for anything that deletes something — rather than
+# hanging or destroying an install nobody agreed to remove.
+confirm() {
+    local prompt="$1" fallback="${2:-y}" reply="" fd=""
+    if { : </dev/tty; } 2>/dev/null; then
+        exec 3</dev/tty
+        fd=3
+    elif [ -t 0 ]; then
+        fd=0
+    else
+        info "(not running interactively — assuming '$fallback')"
+        [ "$fallback" = "y" ] && return 0 || return 1
+    fi
+
+    local answer=0
+    while true; do
+        printf '  %s%s [%s]: %s' "$C_BOLD" "$prompt" "$([ "$fallback" = "y" ] && echo "Y/n" || echo "y/N")" "$C_RESET"
+        if ! read -r reply <&"$fd"; then
+            printf '\n'
+            info "(no answer — assuming '$fallback')"
+            reply="$fallback"
+        fi
+        case "${reply:-$fallback}" in
+            [Yy]|[Yy][Ee][Ss]) answer=0; break ;;
+            [Nn]|[Nn][Oo])     answer=1; break ;;
+            *) warn "Please answer y or n." ;;
+        esac
+    done
+    [ "$fd" = "3" ] && exec 3<&-
+    return "$answer"
+}
+
+banner() {
+    printf '\n%s╭──────────────────────────────────────────────╮%s\n' "$C_BLUE" "$C_RESET"
+    printf '%s│%s  %sVirtualization Toolbox — installer%s          %s│%s\n' "$C_BLUE" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_BLUE" "$C_RESET"
+    printf '%s╰──────────────────────────────────────────────╯%s\n' "$C_BLUE" "$C_RESET"
+    info "Installs the toolbox as a VS Code extension. Nothing is written outside"
+    info "$INSTALL_DIR and your VS Code extensions folder."
+}
+
+# ── system detection ─────────────────────────────────────────────────────────
+# Unlike the pentest toolbox this has no tested/untested distro split: libvirt,
+# virt-install and docker exist everywhere. All detection has to settle is which
+# package manager to use and what the virtualization packages are called.
+detect_os() {
+    step "Checking your system"
+
+    if [ ! -r "$OS_RELEASE" ]; then
+        die "Could not read $OS_RELEASE, so the system could not be identified." \
+            "The toolbox needs a Linux distribution with a package manager."
+    fi
+    # shellcheck disable=SC1091
+    source "$OS_RELEASE"
+
+    DISTRO_NAME="${PRETTY_NAME:-${NAME:-${ID:-unknown}}}"
+    detect_package_manager
+
+    if [ -z "$PKG_MGR" ]; then
+        ok "$DISTRO_NAME detected."
+        warn "No supported package manager found (apt, dnf, pacman, zypper)."
+        info "Nothing will be installed for you — anything missing is listed as you go."
+        return
+    fi
+    ok "$DISTRO_NAME detected (using $PKG_MGR)."
+
+    # KVM needs hardware virtualization. Without it libvirt still runs, but every
+    # VM falls back to plain emulation and crawls — worth saying now, not after
+    # the first VM takes ten minutes to boot.
+    if [ -r /proc/cpuinfo ] && ! grep -qE '^flags.*\b(vmx|svm)\b' /proc/cpuinfo; then
+        warn "No CPU virtualization extensions (vmx/svm) found."
+        info "KVM acceleration will be unavailable — check that VT-x/AMD-V is"
+        info "enabled in your BIOS/UEFI. VMs will run, but only under emulation."
+    fi
+}
+
+# Pick the package manager, and name the virtualization stack for it. Package
+# names for git/curl/unzip/npm are the same across all four; the libvirt ones
+# are not, which is why they are set here rather than in one shared list.
+detect_package_manager() {
+    if command -v apt-get >/dev/null 2>&1; then
+        PKG_MGR="apt"
+        # --allow-releaseinfo-change: Debian changed the 'Codename' value from
+        # 'trixie' to 'forky', which apt refuses to accept silently.
+        PKG_REFRESH=(sudo apt-get update --allow-releaseinfo-change)
+        PKG_INSTALL=(sudo apt-get install -y)
+        VIRT_PKGS=(libvirt-daemon-system libvirt-clients virtinst virt-viewer qemu-system-x86)
+    elif command -v dnf >/dev/null 2>&1; then
+        PKG_MGR="dnf"; PKG_REFRESH=(sudo dnf -q makecache); PKG_INSTALL=(sudo dnf install -y)
+        VIRT_PKGS=(libvirt virt-install virt-viewer qemu-kvm)
+    elif command -v pacman >/dev/null 2>&1; then
+        PKG_MGR="pacman"; PKG_REFRESH=(sudo pacman -Sy --noconfirm); PKG_INSTALL=(sudo pacman -S --noconfirm)
+        VIRT_PKGS=(libvirt virt-install virt-viewer qemu-desktop)
+    elif command -v zypper >/dev/null 2>&1; then
+        PKG_MGR="zypper"; PKG_REFRESH=(sudo zypper --non-interactive refresh); PKG_INSTALL=(sudo zypper --non-interactive install)
+        VIRT_PKGS=(libvirt virt-install virt-viewer qemu-kvm)
+    else
+        PKG_MGR=""
+        VIRT_PKGS=()
+    fi
+}
+
+check_vscode() {
+    step "Looking for the VS Code CLI"
+    if command -v code >/dev/null 2>&1; then
+        ok "Found 'code' ($(command -v code))."
+        return
+    fi
+    die "VS Code's 'code' command was not found on your PATH." \
+        "The toolbox is a VS Code extension, so the CLI is needed to install it." \
+        "" \
+        "  1. Install VS Code:  https://code.visualstudio.com/" \
+        "  2. In VS Code, run:  Command Palette → 'Shell Command: Install code command in PATH'" \
+        "" \
+        "Over Remote-SSH or WSL, run this installer in the session where 'code' resolves."
+}
+
+check_existing() {
+    step "Checking for an existing installation"
+    local has_dir=0 has_ext=0
+    [ -d "$INSTALL_DIR" ] && has_dir=1
+    code --list-extensions 2>/dev/null | grep -qix "$EXT_ID" && has_ext=1
+
+    if [ "$has_dir" -eq 0 ] && [ "$has_ext" -eq 0 ]; then
+        ok "Nothing installed yet — this is a clean install."
+        return
+    fi
+
+    [ "$has_dir" -eq 1 ] && warn "Found an existing checkout at $INSTALL_DIR"
+    [ "$has_ext" -eq 1 ] && warn "Found the extension already installed in VS Code ($EXT_ID)"
+    printf '\n'
+    info "To update in place instead, keeping your configuration:"
+    info "  cd $INSTALL_DIR && git pull && cd extension \\"
+    info "    && npm install && npm run package \\"
+    info "    && code --install-extension $VSIX_NAME --force"
+    printf '\n'
+
+    if ! confirm "Remove the existing installation and reinstall from scratch?" "n"; then
+        die "Nothing was changed." \
+            "To remove it yourself:" \
+            "  code --uninstall-extension $EXT_ID" \
+            "  rm -rf $INSTALL_DIR"
+    fi
+
+    if [ "$has_ext" -eq 1 ]; then
+        info "Uninstalling the extension…"
+        code --uninstall-extension "$EXT_ID" >/dev/null 2>&1 || warn "Could not uninstall cleanly — continuing."
+    fi
+    if [ "$has_dir" -eq 1 ]; then
+        info "Removing $INSTALL_DIR…"
+        rm -rf "$INSTALL_DIR"
+    fi
+    ok "Previous installation removed."
+}
+
+install_dependencies() {
+    step "Checking build dependencies"
+
+    local missing=()
+    for dep in "${REQUIRED_DEPS[@]}"; do
+        if command -v "$dep" >/dev/null 2>&1; then
+            ok "$dep is installed."
+        else
+            warn "$dep is missing."
+            missing+=("$dep")
+        fi
+    done
+
+    if [ "${#missing[@]}" -eq 0 ]; then
+        ok "All build dependencies are present."
+        return
+    fi
+
+    if [ -z "$PKG_MGR" ]; then
+        die "Missing: ${missing[*]} — and no supported package manager was found." \
+            "Install them with your system's package manager, then run this again." \
+            "(apt, dnf, pacman and zypper are handled automatically.)"
+    fi
+    if ! command -v sudo >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then
+        die "Missing: ${missing[*]} — and neither sudo nor root privileges are available." \
+            "Install them as root, then run this again:" \
+            "  ${PKG_INSTALL[*]} ${missing[*]}"
+    fi
+
+    printf '\n'
+    info "These need to be installed with $PKG_MGR:  ${missing[*]}"
+    # npm pulls nodejs (the 'node' runtime) in as a dependency.
+    [[ " ${missing[*]} " == *" npm "* ]] && info "(npm brings in nodejs, which builds the extension.)"
+    info "You will be asked for your password by sudo."
+    printf '\n'
+    if ! confirm "Install them now?"; then
+        die "Cannot continue without: ${missing[*]}" \
+            "Install them yourself and run this again:" \
+            "  ${PKG_INSTALL[*]} ${missing[*]}"
+    fi
+
+    info "Refreshing the package lists (this only updates the index — nothing is upgraded)…"
+    if ! "${PKG_REFRESH[@]}"; then
+        warn "Refreshing the package lists failed — trying the install anyway."
+    fi
+    info "Installing: ${missing[*]}"
+    if ! "${PKG_INSTALL[@]}" "${missing[@]}"; then
+        die "Installing ${missing[*]} failed." \
+            "Fix the package manager error above, then run this installer again."
+    fi
+
+    for dep in "${missing[@]}"; do
+        command -v "$dep" >/dev/null 2>&1 \
+            && ok "$dep installed." \
+            || die "$dep still is not on your PATH after installing." "Open a new shell and try again."
+    done
+}
+
+# The tools the toolbox drives, as opposed to the ones that build it. Nothing
+# here is fatal: the extension badges a missing binary, a stopped libvirtd and a
+# user outside the docker group, each with its own fix — so a box that is not
+# ready yet still gets a working install and is told what is left to do.
+check_virt_stack() {
+    step "Checking the virtualization stack"
+
+    local missing=()
+    for dep in virsh virt-install virt-viewer; do
+        if command -v "$dep" >/dev/null 2>&1; then
+            ok "$dep is installed."
+        else
+            warn "$dep is missing."
+            missing+=("$dep")
+        fi
+    done
+
+    command -v docker >/dev/null 2>&1 \
+        && ok "docker is installed." \
+        || info "docker is not installed — only the container tool needs it."
+
+    if [ "${#missing[@]}" -gt 0 ]; then
+        if [ -z "$PKG_MGR" ] || [ "${#VIRT_PKGS[@]}" -eq 0 ]; then
+            warn "Install libvirt, virt-install and virt-viewer with your package manager."
+        else
+            printf '\n'
+            info "The libvirt tools are missing. With $PKG_MGR that is:"
+            info "  ${PKG_INSTALL[*]} ${VIRT_PKGS[*]}"
+            printf '\n'
+            if confirm "Install the virtualization stack now?"; then
+                if "${PKG_INSTALL[@]}" "${VIRT_PKGS[@]}"; then
+                    ok "Virtualization stack installed."
+                else
+                    warn "Installing the virtualization stack failed — continuing anyway."
+                    info "The extension will badge whatever is still missing."
+                fi
+            else
+                info "Skipped — the extension will badge whatever is missing."
+            fi
+        fi
+    fi
+
+    # libvirtd may be packaged as libvirtd.service or the newer split
+    # virtqemud.service; the extension's Start button handles either, so this is
+    # only a heads-up.
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl is-active --quiet libvirtd 2>/dev/null || systemctl is-active --quiet virtqemud 2>/dev/null; then
+            ok "libvirtd is running."
+        else
+            warn "libvirtd is not running."
+            info "Start it now with:  sudo systemctl enable --now libvirtd"
+            info "(or use the Start button on the libvirtd badge in the extension.)"
+        fi
+    fi
+
+    # Group membership is read at login, so `id -nG` reflects the *current*
+    # session — a fresh `usermod -aG` will not show here until the user re-logs.
+    if getent group libvirt >/dev/null 2>&1 && ! id -nG 2>/dev/null | tr ' ' '\n' | grep -qx libvirt; then
+        warn "$USER is not in the 'libvirt' group."
+        info "Without it every virsh call needs sudo. To fix, then log out and in:"
+        info "  sudo usermod -aG libvirt $USER"
+    fi
+}
+
+fetch_repo() {
+    step "Downloading the toolbox"
+    rm -rf "/tmp/$GIT_REPO" "/tmp/$GIT_REPO.zip" "/tmp/$GIT_REPO-main"
+
+    info "Cloning https://github.com/$GIT_USER/$GIT_REPO into $INSTALL_DIR…"
+    if git clone --quiet "https://github.com/$GIT_USER/$GIT_REPO.git" "$INSTALL_DIR"; then
+        ok "Repository cloned ($(cd "$INSTALL_DIR" && git rev-parse --short HEAD))."
+        return
+    fi
+
+    warn "git clone failed — falling back to the source archive."
+    if ! curl -fsSL -o "/tmp/$GIT_REPO.zip" "https://github.com/$GIT_USER/$GIT_REPO/archive/refs/heads/main.zip"; then
+        die "Could not download the toolbox." \
+            "Check your network connection and that github.com is reachable, then try again."
+    fi
+    unzip -q "/tmp/$GIT_REPO.zip" -d /tmp
+    mv "/tmp/$GIT_REPO-main" "$INSTALL_DIR"
+    rm -f "/tmp/$GIT_REPO.zip"
+    ok "Archive downloaded and extracted."
+    warn "Installed from an archive, not a git clone — in-place updates will not work."
+}
+
+build_and_install_extension() {
+    step "Building and installing the extension"
+
+    info "Installing npm packages (first run takes a minute)…"
+    if ! (cd "$INSTALL_DIR/extension" && npm install --no-fund --no-audit --loglevel=error); then
+        die "npm install failed." \
+            "The error above is from npm. A too-old Node is the usual cause:" \
+            "  node --version   (the extension builds on Node 18 or newer)"
+    fi
+    ok "npm packages installed."
+
+    info "Packaging the extension (esbuild bundle, then vsce)…"
+    # vsce runs 'vscode:prepublish' (esbuild) first, then packages the VSIX.
+    if ! (cd "$INSTALL_DIR/extension" && npm run package --silent); then
+        die "Building the extension failed." \
+            "The error above is from esbuild or vsce. Please report it with that output:" \
+            "  https://github.com/$GIT_USER/$GIT_REPO/issues"
+    fi
+    ok "Built $VSIX_NAME."
+
+    info "Installing the extension into VS Code…"
+    if ! code --install-extension "$INSTALL_DIR/extension/$VSIX_NAME" --force; then
+        die "VS Code refused to install the extension." \
+            "Try it by hand to see the full error:" \
+            "  code --install-extension $INSTALL_DIR/extension/$VSIX_NAME --force"
+    fi
+    if ! code --list-extensions 2>/dev/null | grep -qix "$EXT_ID"; then
+        die "The extension does not appear in VS Code after installing." \
+            "Restart VS Code and check the Extensions view for '$EXT_ID'."
+    fi
+    ok "Extension installed."
+}
+
+display_launch_instructions() {
+    step "Done"
+    local version
+    version="$(cd "$INSTALL_DIR/extension" && node -p "require('./package.json').version" 2>/dev/null || echo "?")"
+    printf '\n%s✓ Virtualization Toolbox v%s is installed.%s\n' "$C_GREEN" "$version" "$C_RESET"
+
+    cat << EOF
+
+${C_BOLD}GETTING STARTED${C_RESET}
+    1. Open the toolbox in VS Code:   code "$INSTALL_DIR"
+    2. Click the Virtualization Toolbox icon in the activity bar.
+    3. The Get Started walkthrough opens on first launch — it covers finding a
+       tool, reviewing the command and running it.
+    4. Press Ctrl+Alt+V at any time to fuzzy-find a tool.
+
+${C_BOLD}CONFIGURATION${C_RESET}
+    The Configuration view (the gear icon in the Tools title bar) holds the
+    libvirt connection URI, the images directory and the default network.
+    Those values inject into every tool's command.
+
+${C_BOLD}OUTPUT${C_RESET}
+    Runs land in $INSTALL_DIR/scripts/outputs/.
+
+${C_BOLD}UPDATE${C_RESET}
+    cd "$INSTALL_DIR" && git pull && cd extension \\
+      && npm install && npm run package \\
+      && code --install-extension $VSIX_NAME --force
+
+${C_BOLD}UNINSTALL${C_RESET}
+    code --uninstall-extension $EXT_ID && rm -rf "$INSTALL_DIR"
+
+EOF
+}
+
+main() {
+    banner
+    detect_os
+    check_vscode
+    check_existing
+    install_dependencies
+    check_virt_stack
+    fetch_repo
+    build_and_install_extension
+    display_launch_instructions
+}
+
+# Run only when executed, not when a test sources this file for its functions.
+# Under `curl … | bash` there is no BASH_SOURCE, so it falls back to $0 and runs.
+if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
+    main
+fi

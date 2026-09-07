@@ -67,7 +67,7 @@ for (const tool of TOOLS) {
   for (const n of tool.notes ?? []) {
     if (!n.command) continue;
     for (const tok of tokensOf(n.command)) {
-      // notes may reference literal {RUSER}-style config or fields; anything else is a typo
+      // notes may reference literal {IMAGES_DIR}-style config or fields; anything else is a typo
       if (!validTokens.has(tok) && !CONFIG_KEYS.includes(tok)) fail(`${t} note: token {${tok}} unknown`);
     }
   }

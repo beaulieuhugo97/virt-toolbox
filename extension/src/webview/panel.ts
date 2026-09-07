@@ -19,8 +19,6 @@ import { Tool } from "../types";
 interface FileWarning {
   fieldId: string;
   path: string;
-  /** True when it lives in the wordlists directory, so we can offer the download. */
-  isWordlist: boolean;
 }
 
 type View =
@@ -44,28 +42,16 @@ interface Session {
   captured?: ChildProcess;
 }
 
-// Curated quick-launch set for the home dashboard — the tools reached for first
-// in a typical engagement. Filtered against the registry so a removed tool just
-// drops out. Recently-run tools are prepended ahead of these at build time.
-const QUICK_TOOL_IDS = [
-  "nmap", "ffuf", "gobuster", "nxc", "smbclient", "bloodhound",
-  "impacket", "evil-winrm", "hashcat", "hydra", "metasploit", "wordlists-download",
-];
+// Curated quick-launch set for the home dashboard. Filtered against the registry
+// so a removed tool just drops out. Recently-run tools are prepended ahead of
+// these at build time.
+const QUICK_TOOL_IDS = ["virsh", "virt-images", "virt-net", "docker"];
 
-/** Config keys that name a wordlist — a missing one of these offers the download. */
-const WORDLIST_CONFIG_KEYS = new Set(
-  CONFIG_GROUPS.find((g) => g.title === "Wordlists")?.items.map((i) => i.key) ?? []
-);
-
-// The config keys surfaced on the dashboard's target card (label → key).
+// The config keys surfaced on the dashboard's card (label → key).
 const HOME_CONFIG: { label: string; key: string }[] = [
-  { label: "Local IP (LIP)", key: "LIP" },
-  { label: "Local port (LPORT)", key: "LPORT" },
-  { label: "Remote host (RHOST)", key: "RHOST" },
-  { label: "Remote IP (RIP)", key: "RIP" },
-  { label: "Username (RUSER)", key: "RUSER" },
-  { label: "Domain (DOMAIN)", key: "DOMAIN" },
-  { label: "DC IP (DC_IP)", key: "DC_IP" },
+  { label: "Connection URI (LIBVIRT_URI)", key: "LIBVIRT_URI" },
+  { label: "Images directory (IMAGES_DIR)", key: "IMAGES_DIR" },
+  { label: "Default network (DEFAULT_NET)", key: "DEFAULT_NET" },
 ];
 
 /**
@@ -478,10 +464,9 @@ export class ToolboxPanel {
   }
 
   /**
-   * Which `file` fields point at something that isn't there. The common case is
-   * a default wordlist (gobuster's {DIR_WORDLIST}) on a box where the wordlists
-   * were never downloaded — the run would fail with a bare "no such file", so
-   * the form says so first, and offers the download. Re-computed on every
+   * Which `file` fields point at something that isn't there — an ISO or qcow2
+   * that was never downloaded into the images directory, say. The run would fail
+   * with a bare "no such file", so the form says so first. Re-computed on every
    * keystroke-driven resolve, so the warning clears as soon as the path is good.
    */
   private missingFiles(tool: Tool, state: Record<string, string>): FileWarning[] {
@@ -495,10 +480,7 @@ export class ToolboxPanel {
       if (!value || value.includes("{")) continue;
       const resolved = value.startsWith("~") ? path.join(os.homedir(), value.slice(1)) : value;
       if (fs.existsSync(resolved)) continue;
-      const isWordlist =
-        (field.rootConfig !== undefined && WORDLIST_CONFIG_KEYS.has(field.rootConfig)) ||
-        resolved.startsWith(expandTilde(this.config.get("WORDLISTS_DIR")));
-      out.push({ fieldId: field.id, path: resolved, isWordlist });
+      out.push({ fieldId: field.id, path: resolved });
     }
     return out;
   }

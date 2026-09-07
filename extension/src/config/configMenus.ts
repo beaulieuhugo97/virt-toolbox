@@ -1,19 +1,17 @@
-// The config menus, ported from scripts/env/config.env's *_CONFIG_MENU arrays.
-// In the TUI these 5-tuples drive `config`'s generic editor; here the same
-// declarations drive the settings webview. One declaration, both front-ends.
+// The config menus. These declarations drive the settings webview, and every key
+// here is injectable into a tool's command or field default as a {TOKEN} — see
+// template/resolver.ts. Keep them to values that more than one tool needs: a
+// one-off belongs in that tool's field defaults, not here.
 
 export type ConfigInputType =
   | "text"
-  | "password"
-  | "port"
-  | "network_interface"
-  | "wordlist";
+  | "path";
 
 export interface ConfigItem {
   label: string;
   key: string;
   type: ConfigInputType;
-  validation: "required" | "optional" | "port";
+  validation: "required" | "optional";
 }
 
 export interface ConfigGroup {
@@ -23,57 +21,23 @@ export interface ConfigGroup {
 
 export const CONFIG_GROUPS: ConfigGroup[] = [
   {
-    title: "Local",
+    title: "Libvirt",
     items: [
-      { label: "Local IP Address", key: "LIP", type: "network_interface", validation: "required" },
-      { label: "Local Port", key: "LPORT", type: "port", validation: "port" },
-    ],
-  },
-  {
-    title: "Remote",
-    items: [
-      { label: "Remote Host", key: "RHOST", type: "text", validation: "required" },
-      { label: "Remote IP Address", key: "RIP", type: "text", validation: "required" },
-      { label: "Remote Port", key: "RPORT", type: "text", validation: "required" },
-      { label: "Remote Username", key: "RUSER", type: "text", validation: "required" },
-      { label: "Remote Password", key: "RPASSWORD", type: "password", validation: "required" },
-    ],
-  },
-  {
-    title: "Wordlists",
-    items: [
-      { label: "Wordlists Directory", key: "WORDLISTS_DIR", type: "wordlist", validation: "optional" },
-      { label: "Password Wordlist", key: "PASS_WORDLIST_FILE", type: "wordlist", validation: "optional" },
-      { label: "Username Wordlist", key: "USER_WORDLIST_FILE", type: "wordlist", validation: "optional" },
-      { label: "Directory Wordlist", key: "DIR_WORDLIST", type: "wordlist", validation: "optional" },
-      { label: "Subdomain Wordlist", key: "SUBDOM_WORDLIST", type: "wordlist", validation: "optional" },
-    ],
-  },
-  {
-    title: "Active Directory",
-    items: [
-      { label: "Domain Name", key: "DOMAIN", type: "text", validation: "required" },
-      { label: "Domain Controller IP", key: "DC_IP", type: "text", validation: "required" },
+      { label: "Connection URI", key: "LIBVIRT_URI", type: "text", validation: "required" },
+      { label: "Images directory", key: "IMAGES_DIR", type: "path", validation: "required" },
+      { label: "Default network", key: "DEFAULT_NET", type: "text", validation: "required" },
     ],
   },
 ];
 
-// Seed defaults, mirroring config.env's literal values. DOMAIN/DC_IP intentionally
-// omitted — they fall back to RHOST/RIP at read time (see ConfigStore), matching
-// config.env's `DOMAIN="$RHOST"` / `DC_IP="$RIP"`.
+// Seed defaults — the values the tools assumed literally before they were made
+// configurable, so an untouched config behaves exactly as it always did.
 export const CONFIG_DEFAULTS: Record<string, string> = {
-  LIP: "10.10.10.10",
-  LPORT: "1337",
-  RIP: "10.100.100.100",
-  RPORT: "80",
-  RHOST: "box.htb",
-  RUSER: "user.name",
-  RPASSWORD: "Pa5%W0rD",
-  WORDLISTS_DIR: "~/.virt-toolbox/wordlists",
-  PASS_WORDLIST_FILE: "~/.virt-toolbox/wordlists/rockyou.txt",
-  USER_WORDLIST_FILE: "~/.virt-toolbox/wordlists/windows-usernames-wordlist.txt",
-  DIR_WORDLIST: "~/.virt-toolbox/wordlists/discovery-wordlist.txt",
-  SUBDOM_WORDLIST: "~/.virt-toolbox/wordlists/subdomain-wordlist.txt",
+  // `qemu:///system` is what `sudo virsh` already resolves to; setting it
+  // explicitly is what lets a session or remote URI work instead.
+  LIBVIRT_URI: "qemu:///system",
+  IMAGES_DIR: "/var/lib/libvirt/images",
+  DEFAULT_NET: "virbr0",
 };
 
 /** Every config key, in declaration order. */

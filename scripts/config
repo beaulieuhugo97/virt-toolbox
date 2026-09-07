@@ -91,14 +91,14 @@ handle_field_update() {
         "port")
             new_value=$(input "Enter the port number" "$current_value")
             ;;
-        "wordlist")
-            new_value=$(file_browser "$WORDLISTS_DIR")
+        "path")
+            new_value=$(file_browser "$IMAGES_DIR")
             local exit_code=$?
             if [ $exit_code -eq 0 ] && [ -n "$new_value" ]; then
                 # Success case handled below
                 :
             elif [ $exit_code -eq 2 ]; then
-                print_info "Wordlist operation completed. Please select ${display_name,,} again to choose the file."
+                print_info "Operation completed. Please select ${display_name,,} again to choose the path."
                 return
             else
                 print_info "${display_name} selection cancelled."
@@ -220,18 +220,6 @@ choose_network_interface() {
     fi
 }
 
-edit_local_config() {
-    edit_config_generic "Local Configuration" LOCAL_CONFIG_MENU
-}
-
-edit_remote_config() {
-    edit_config_generic "Remote Configuration" REMOTE_CONFIG_MENU
-}
-
-edit_ad_config() {
-    edit_config_generic "Active Directory" AD_CONFIG_MENU
-}
-
-edit_wordlist_config() {
-    edit_config_generic "Wordlists Configuration" WORDLISTS_CONFIG_MENU
+edit_libvirt_config() {
+    edit_config_generic "Libvirt Configuration" LIBVIRT_CONFIG_MENU
 }

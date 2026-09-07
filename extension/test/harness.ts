@@ -58,29 +58,18 @@ export function done(): never {
   process.exit(failures === 0 ? 0 : 1);
 }
 
-/** Where setup-targets.sh seeds fixtures (wordlists, sample files) in the container. */
+/** Where setup-targets.sh seeds fixtures (sample ISOs and disk images) in the container. */
 export const FX = process.env.TOOLBOX_FX || "/root/fx";
 
 /**
- * Config the extractor points every tool at: the container's own localhost
- * services + seeded fixtures. The resolver bakes these into runnable commands.
- * DOMAIN/DC_IP stay derived (RHOST/RIP) via fakeConfig.
+ * Config the extractor points every tool at: a throwaway session libvirt instance
+ * and the seeded image fixtures, so nothing touches the real system hypervisor.
+ * The resolver bakes these into runnable commands.
  */
 export const TEST_CONFIG: Record<string, string> = {
-  LIP: "127.0.0.1",
-  LPORT: "4444",
-  RHOST: "127.0.0.1",
-  RIP: "127.0.0.1",
-  RPORT: "80",
-  RUSER: "tester",
-  RPASSWORD: "Testpass1",
-  DOMAIN: "example.test",
-  DC_IP: "127.0.0.1",
-  WORDLISTS_DIR: `${FX}/wordlists`,
-  PASS_WORDLIST_FILE: `${FX}/wordlists/passwords.txt`,
-  USER_WORDLIST_FILE: `${FX}/wordlists/users.txt`,
-  DIR_WORDLIST: `${FX}/wordlists/dirs.txt`,
-  SUBDOM_WORDLIST: `${FX}/wordlists/subdomains.txt`,
+  LIBVIRT_URI: "qemu:///session",
+  IMAGES_DIR: `${FX}/images`,
+  DEFAULT_NET: "virbr0",
 };
 
 /**
