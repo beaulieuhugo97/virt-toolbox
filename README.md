@@ -64,15 +64,15 @@ Or manually:
 
 ```bash
 git clone https://github.com/beaulieuhugo97/virt-toolbox.git ~/.virt-toolbox
-cd ~/.virt-toolbox/extension
+cd ~/.virt-toolbox
 npm install && npm run package
 code --install-extension virt-toolbox.vsix
 ```
 
 > [!TIP]
-> Hacking on the extension itself? Open the **repo root** in VS Code and press **F5**
-> for an Extension Development Host — the launch config lives in `.vscode/` and
-> points at `extension/`. See [`extension/README.md`](extension/README.md).
+> Hacking on the extension itself? Open the repo in VS Code and press **F5** for an
+> Extension Development Host. See [ARCHITECTURE.md](ARCHITECTURE.md) for how the
+> manifest-driven form engine fits together.
 
 ## 🔄 Updating
 
@@ -80,7 +80,7 @@ The toolbox is side-loaded, not on the marketplace, so VS Code will never update
 it for you. Pull and rebuild in place:
 
 ```bash
-cd ~/.virt-toolbox && git pull && cd extension && npm install && npm run package \
+cd ~/.virt-toolbox && git pull && npm install && npm run package \
   && code --install-extension virt-toolbox.vsix --force
 ```
 

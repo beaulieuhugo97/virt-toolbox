@@ -201,8 +201,7 @@ check_existing() {
     [ "$has_ext" -eq 1 ] && warn "Found the extension already installed in VS Code ($EXT_ID)"
     printf '\n'
     info "To update in place instead, keeping your configuration:"
-    info "  cd $INSTALL_DIR && git pull && cd extension \\"
-    info "    && npm install && npm run package \\"
+    info "  cd $INSTALL_DIR && git pull && npm install && npm run package \\"
     info "    && code --install-extension $VSIX_NAME --force"
     printf '\n'
 
@@ -372,7 +371,7 @@ build_and_install_extension() {
     step "Building and installing the extension"
 
     info "Installing npm packages (first run takes a minute)…"
-    if ! (cd "$INSTALL_DIR/extension" && npm install --no-fund --no-audit --loglevel=error); then
+    if ! (cd "$INSTALL_DIR" && npm install --no-fund --no-audit --loglevel=error); then
         die "npm install failed." \
             "The error above is from npm. A too-old Node is the usual cause:" \
             "  node --version   (the extension builds on Node 18 or newer)"
@@ -381,7 +380,7 @@ build_and_install_extension() {
 
     info "Packaging the extension (esbuild bundle, then vsce)…"
     # vsce runs 'vscode:prepublish' (esbuild) first, then packages the VSIX.
-    if ! (cd "$INSTALL_DIR/extension" && npm run package --silent); then
+    if ! (cd "$INSTALL_DIR" && npm run package --silent); then
         die "Building the extension failed." \
             "The error above is from esbuild or vsce. Please report it with that output:" \
             "  https://github.com/$GIT_USER/$GIT_REPO/issues"
@@ -389,10 +388,10 @@ build_and_install_extension() {
     ok "Built $VSIX_NAME."
 
     info "Installing the extension into VS Code…"
-    if ! code --install-extension "$INSTALL_DIR/extension/$VSIX_NAME" --force; then
+    if ! code --install-extension "$INSTALL_DIR/$VSIX_NAME" --force; then
         die "VS Code refused to install the extension." \
             "Try it by hand to see the full error:" \
-            "  code --install-extension $INSTALL_DIR/extension/$VSIX_NAME --force"
+            "  code --install-extension $INSTALL_DIR/$VSIX_NAME --force"
     fi
     if ! code --list-extensions 2>/dev/null | grep -qix "$EXT_ID"; then
         die "The extension does not appear in VS Code after installing." \
@@ -404,7 +403,7 @@ build_and_install_extension() {
 display_launch_instructions() {
     step "Done"
     local version
-    version="$(cd "$INSTALL_DIR/extension" && node -p "require('./package.json').version" 2>/dev/null || echo "?")"
+    version="$(cd "$INSTALL_DIR" && node -p "require('./package.json').version" 2>/dev/null || echo "?")"
     printf '\n%s✓ Virtualization Toolbox v%s is installed.%s\n' "$C_GREEN" "$version" "$C_RESET"
 
     cat << EOF
@@ -425,8 +424,7 @@ ${C_BOLD}OUTPUT${C_RESET}
     Runs land in ~/.virt-toolbox/outputs/ (virtToolbox.outputsPath to change it).
 
 ${C_BOLD}UPDATE${C_RESET}
-    cd "$INSTALL_DIR" && git pull && cd extension \\
-      && npm install && npm run package \\
+    cd "$INSTALL_DIR" && git pull && npm install && npm run package \\
       && code --install-extension $VSIX_NAME --force
 
 ${C_BOLD}UNINSTALL${C_RESET}
