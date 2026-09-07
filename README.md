@@ -70,8 +70,9 @@ code --install-extension virt-toolbox.vsix
 ```
 
 > [!TIP]
-> Hacking on the extension itself? Open `extension/` in VS Code and press **F5** for
-> an Extension Development Host — see [`extension/README.md`](extension/README.md).
+> Hacking on the extension itself? Open the **repo root** in VS Code and press **F5**
+> for an Extension Development Host — the launch config lives in `.vscode/` and
+> points at `extension/`. See [`extension/README.md`](extension/README.md).
 
 ## 🔄 Updating
 
@@ -118,6 +119,8 @@ Runs land in `scripts/outputs/<tool>/`.
 
 - **`extension/`** — the VS Code extension (see [extension/README.md](extension/README.md)).
 - **`scripts/`** — the original bash TUI the tools were ported from (the reference).
+  The extension never runs these, but it does anchor on `scripts/Tools/` to locate
+  the checkout, and every run's working directory is `scripts/outputs/<tool>/`.
 
 ## 📄 License
 
