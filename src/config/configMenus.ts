@@ -28,6 +28,14 @@ export const CONFIG_GROUPS: ConfigGroup[] = [
       { label: "Default network", key: "DEFAULT_NET", type: "text", validation: "required" },
     ],
   },
+  {
+    title: "Docker",
+    items: [
+      // Text, not path: the value may be `podman`, `nerdctl`, `sudo -n docker`, or
+      // `env DOCKER_HOST=ssh://host docker` — none of which a folder picker helps with.
+      { label: "Docker CLI", key: "DOCKER_BIN", type: "text", validation: "required" },
+    ],
+  },
 ];
 
 // Seed defaults — the values the tools assumed literally before they were made
@@ -38,6 +46,9 @@ export const CONFIG_DEFAULTS: Record<string, string> = {
   LIBVIRT_URI: "qemu:///system",
   IMAGES_DIR: "/var/lib/libvirt/images",
   DEFAULT_NET: "virbr0",
+  // The container CLI every docker tool invokes. Swapping it here is what lets
+  // podman/nerdctl users, or a passwordless `sudo -n docker`, drive the same tools.
+  DOCKER_BIN: "docker",
 };
 
 /** Every config key, in declaration order. */

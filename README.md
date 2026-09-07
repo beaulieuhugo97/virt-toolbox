@@ -37,7 +37,11 @@ still works, but VMs fall back to plain emulation and run very slowly.
 | **virsh** | VM lifecycle — start, shutdown, suspend, reboot, destroy, undefine, viewer — plus snapshot create/revert/delete |
 | **Images & VM creation** | download an image into the images directory, create a VM from an ISO (`virt-install`), or import an existing qcow2 |
 | **virsh networks** | list/start/stop libvirt networks, create NAT / host-only / isolated networks, and toggle IP forwarding |
-| **docker** | run a throwaway container on the host network with the working directory mounted |
+| **Docker containers** | run a throwaway container, then list, start/stop/kill, exec a shell, follow logs, copy files out and remove — listings render as sortable tables |
+| **Docker images** | list, pull, tag, push, build from a Dockerfile, layer history, save/load a tar, disk usage and pruning |
+| **Docker networks** | list/inspect, create bridge / macvlan / ipvlan / overlay networks, connect and disconnect containers |
+| **Docker volumes** | list/inspect, size and users, create, remove, and back up / restore through a helper container |
+| **Docker Compose** | up/down a stack, per-service start/stop/build/exec, service status, logs and the merged config |
 
 ## 🔗 Requirements
 

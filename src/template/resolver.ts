@@ -18,6 +18,20 @@ export function timestamp(d = new Date()): string {
 }
 
 /**
+ * Replace {CONFIG} tokens in a string that is NOT a per-run command — a field
+ * default shown in the form, or a `verify` probe run before any field exists.
+ * Unlike `interpolate`, a token that is not a config key is left STANDING rather
+ * than dropped: in a field default it names another *field* (cDiskPath's
+ * "{IMAGES_DIR}/{cVmName}.qcow2"), which only has a value once the form is filled
+ * in, so it is resolved at command time instead. Dropping it here is what
+ * silently produced "…/images/.qcow2" for every VM.
+ */
+export function interpolateConfig(text: string, config: ConfigStore): string {
+  const all = config.getAll();
+  return text.replace(/\{(\w+)\}/g, (m, name: string) => all[name] ?? m);
+}
+
+/**
  * Field ids currently visible given the field state. Visibility cascades: a
  * field whose `when` references a *hidden* field sees that field's value as
  * absent (""), so e.g. the VirtIO ISO field (gated on a Windows `cOsVariant`)

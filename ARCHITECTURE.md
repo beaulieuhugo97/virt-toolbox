@@ -14,7 +14,11 @@ there is no per-tool UI code. Adding a tool means adding a manifest entry.
 | Virtual Machines | **virsh** | List, start/stop, suspend/resume, reboot, force-reset, destroy and delete VMs; list / create / revert / delete snapshots. |
 | Virtual Machines | **Images & VM creation** | Download an ISO/qcow2 into the images dir, create a VM from an ISO with `virt-install` (VirtIO CD for Windows), or import an existing disk. |
 | Networking | **virsh networks** | List/inspect networks, create NAT / host-only / isolated networks (`net-define`), start/stop/destroy, DHCP leases, and IP-forwarding rules. |
-| Container | **docker** | Spin a throwaway `parrotsec/security` or `kalilinux/kali-rolling` container on the host network. |
+| Container | **Docker containers** | Run a throwaway container, then list/start/stop/restart/kill, exec a shell, follow logs, stats, copy files out, inspect and remove. |
+| Container | **Docker images** | List, pull, tag, push, build from a Dockerfile, layer history, save/load a tar, disk usage and pruning. |
+| Container | **Docker networks** | List/inspect, create bridge / macvlan / ipvlan / overlay networks, connect and disconnect containers, remove and prune. |
+| Container | **Docker volumes** | List/inspect, see which containers use one and its size, create, remove, and back up / restore through a helper container. |
+| Container | **Docker Compose** | Up/down a stack, per-service start/stop/restart/build/pull/exec, service status, logs and the merged config. |
 
 ## The host owns the command
 
@@ -49,9 +53,13 @@ blocked — the badge tells you what to fix.
 
 libvirt and `virt-install` need root and are interactive, so those actions run in
 a real VS Code terminal where the `sudo` prompt works (`mode: "terminal"`). The
-engine also supports `mode: "captured"` — collect stdout, run it through a parser,
-render a sortable table — which no virtualization tool uses yet; see the note in
-[`src/parsers/index.ts`](src/parsers/index.ts).
+The docker tools instead run their listings in `mode: "captured"` — collect stdout,
+run it through a parser, render a sortable table. Each listing is a `--format` Go
+template paired with a parser id from [`src/parsers/index.ts`](src/parsers/index.ts),
+keyed by output *shape* rather than by tool, so one `docker.ps` parser serves the
+containers, networks, volumes and compose tools alike. Anything needing a TTY
+(`run -ti`, `exec`, `logs -f`, `build`, `pull`, `compose up`) stays on a terminal —
+as does every `prune`, so docker's own `[y/N]` can be answered.
 
 Each run executes in `<outputsPath>/<tool>/`, default `~/.virt-toolbox/outputs/`.
 This matters beyond tidiness: a command may use `$PWD` (docker mounts it).

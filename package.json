@@ -1,7 +1,7 @@
 {
   "name": "virt-toolbox",
   "displayName": "Virtualization Toolbox",
-  "description": "Drive libvirt/KVM from guided VS Code forms — list, create (virt-install), snapshot and manage virsh VMs, wire up libvirt networks, and spin throwaway docker containers. Review the exact command, then run it.",
+  "description": "Drive libvirt/KVM and Docker from guided VS Code forms — list, create (virt-install), snapshot and manage virsh VMs, wire up libvirt networks, and work through Docker containers, images, networks, volumes and Compose stacks as sortable listings. Review the exact command, then run it.",
   "version": "1.0.0",
   "publisher": "hugoquebec",
   "license": "SEE LICENSE IN LICENSE.md",
@@ -33,7 +33,10 @@
     "libvirt",
     "virsh",
     "kvm",
-    "docker"
+    "docker",
+    "containers",
+    "compose",
+    "podman"
   ],
   "activationEvents": [],
   "main": "./out/extension.js",

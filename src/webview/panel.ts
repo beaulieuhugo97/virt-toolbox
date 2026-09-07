@@ -7,7 +7,7 @@ import { Registry } from "../registry/registry";
 import { ConfigStore } from "../config/configStore";
 import { ExecutionEngine } from "../exec/engine";
 import { CONFIG_GROUPS } from "../config/configMenus";
-import { resolveCommand, resolveNotes } from "../template/resolver";
+import { interpolateConfig, resolveCommand, resolveNotes } from "../template/resolver";
 import { HistoryStore } from "../history/historyStore";
 import { FavoritesStore } from "../favorites/favoritesStore";
 import { categoryIcon } from "../tree/categoryIcons";
@@ -40,13 +40,14 @@ interface Session {
 // Curated quick-launch set for the home dashboard. Filtered against the registry
 // so a removed tool just drops out. Recently-run tools are prepended ahead of
 // these at build time.
-const QUICK_TOOL_IDS = ["virsh", "virt-images", "virt-net", "docker"];
+const QUICK_TOOL_IDS = ["virsh", "virt-images", "virt-net", "docker", "docker-compose", "docker-images"];
 
 // The config keys surfaced on the dashboard's card (label → key).
 const HOME_CONFIG: { label: string; key: string }[] = [
   { label: "Connection URI (LIBVIRT_URI)", key: "LIBVIRT_URI" },
   { label: "Images directory (IMAGES_DIR)", key: "IMAGES_DIR" },
   { label: "Default network (DEFAULT_NET)", key: "DEFAULT_NET" },
+  { label: "Docker CLI (DOCKER_BIN)", key: "DOCKER_BIN" },
 ];
 
 /**
@@ -287,9 +288,13 @@ export class ToolboxPanel {
 
   /** Check every gate (deps on PATH, service active, group membership). */
   private async checkGates(session: Session, tool: Tool): Promise<void> {
+    // Every probe is time-boxed. `checkGates` awaits them ALL before posting a
+    // single gateStatus, so one command that blocks forever — a `sudo` probe with
+    // no TTY waiting on askpass — would leave the tool with no badges at all and
+    // no error, rather than one red badge.
     const run = (cmd: string) =>
       new Promise<boolean>((resolve) =>
-        exec(cmd, { shell: "/bin/bash" }, (err) => resolve(!err))
+        exec(cmd, { shell: "/bin/bash", timeout: 5000 }, (err) => resolve(!err))
       );
 
     const deps = await Promise.all(
@@ -297,7 +302,13 @@ export class ToolboxPanel {
     );
 
     const verify = await Promise.all(
-      (tool.verify ?? []).map(async (v) => ({ label: v.label, ok: await run(v.command), hint: v.hint }))
+      // A verify command may carry {CONFIG} tokens ({DOCKER_BIN}), so it is
+      // resolved the same way a field default is.
+      (tool.verify ?? []).map(async (v) => ({
+        label: v.label,
+        ok: await run(interpolateConfig(v.command, this.config)),
+        hint: v.hint,
+      }))
     );
 
     let service: { name: string; active: boolean } | undefined;

@@ -1,6 +1,7 @@
 import { ConfigStore } from "../config/configStore";
 import { Field, Option, SerializedField, SerializedTool, Tool } from "../types";
 import { TOOLS } from "../tools";
+import { interpolateConfig } from "../template/resolver";
 
 /** Normalize a field's `options` (map | tuple[] | string[]) into {label,value}[]. */
 export function normalizeOptions(options: Field["options"]): Option[] | undefined {
@@ -21,16 +22,7 @@ export function normalizeOptions(options: Field["options"]): Option[] | undefine
 
 /** Resolve a field default's {CONFIG} tokens so the form shows a concrete value. */
 function resolveDefault(def: string | undefined, config: ConfigStore): string | undefined {
-  if (def === undefined) {
-    return undefined;
-  }
-  const all = config.getAll();
-  // Config tokens resolve to concrete values here so the form shows real paths.
-  // A token that is NOT a config key is left standing: it names another *field*
-  // (cDiskPath's "{IMAGES_DIR}/{cVmName}.qcow2"), which only has a value once the
-  // form is filled in, so it is resolved at command time instead. Dropping it
-  // here is what silently produced "…/images/.qcow2" for every VM.
-  return def.replace(/\{(\w+)\}/g, (m, name: string) => all[name] ?? m);
+  return def === undefined ? undefined : interpolateConfig(def, config);
 }
 
 export class Registry {

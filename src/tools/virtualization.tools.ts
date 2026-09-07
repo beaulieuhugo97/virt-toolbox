@@ -1,17 +1,18 @@
 import { Tool } from "../types";
 
-// The virtualization domain, ported from the libvirt/virsh bash TUI this
-// project grew out of. Four tools grouped by the tree:
+// The libvirt domain, ported from the libvirt/virsh bash TUI this project grew
+// out of. Three tools grouped by the tree:
 //
 //   Virtualization/Virtual_Machines → virsh        (VM lifecycle + snapshots)
 //   Virtualization/Virtual_Machines → virt-images  (download / create / import)
-//   Virtualization/Networking        → virt-net     (libvirt networks + forwarding)
-//   Virtualization/Container         → docker       (throwaway container)
+//   Virtualization/Networking       → virt-net     (libvirt networks + forwarding)
+//
+// The container tools live in docker.tools.ts, under Virtualization/Container.
 //
 // Everything runs on the hypervisor host. virsh/virt-install commands need root
 // and are interactive, so they run in terminal mode (a real TTY) so a sudo
-// prompt can be answered. libvirt-backed tools gate on the libvirtd service
-// (badge + Start button); docker gates on the `docker` group (badge + Add-me).
+// prompt can be answered. These tools gate on the libvirtd service (badge +
+// Start button).
 export const tools: Tool[] = [
   // ── VM lifecycle + snapshots ────────────────────────────────────────────────
   {
@@ -250,30 +251,6 @@ export const tools: Tool[] = [
       },
       { id: "fwd-enable", label: "Enable IP forwarding", mode: "terminal", sudo: true, section: "forwarding", command: "sudo iptables -I FORWARD -i virbr-{fwNet} -j ACCEPT && sudo iptables -I FORWARD -o virbr-{fwNet} -j ACCEPT && sudo iptables -L FORWARD -n --line-numbers | grep virbr-{fwNet}" },
       { id: "fwd-disable", label: "Disable IP forwarding", mode: "terminal", sudo: true, section: "forwarding", command: "sudo iptables -D FORWARD -i virbr-{fwNet} -j ACCEPT ; sudo iptables -D FORWARD -o virbr-{fwNet} -j ACCEPT ; sudo iptables -L FORWARD -n --line-numbers | grep virbr-{fwNet} || echo 'no forwarding rules for virbr-{fwNet}'" },
-    ],
-  },
-
-  // ── throwaway container ─────────────────────────────────────────────────────
-  {
-    id: "docker",
-    category: "Virtualization/Container",
-    deps: ["docker"],
-    group: "docker",
-    fields: [
-      { id: "image", type: "select", label: "Image", options: ["parrotsec/security", "kalilinux/kali-rolling"], default: "parrotsec/security" },
-      { id: "mount", type: "text", label: "Mount path", default: "/pwnbox" },
-    ],
-    actions: [{ id: "run", label: "Run container", mode: "terminal", command: "docker run --rm -ti --network host -v $PWD:{mount} {image}" }],
-    notesTitle: "Requirements",
-    notes: [
-      { label: "The docker service must be running", command: "sudo systemctl start docker" },
-      { label: "Your user must be in the docker group (use the Add-me badge above, then re-login)" },
-      {
-        // The TUI warned about this before running; kali-rolling is a bare base image.
-        label: "kalilinux/kali-rolling ships with no tools — install them inside the container (or kali-linux-large for the full set)",
-        when: { field: "image", equals: "kalilinux/kali-rolling" },
-        command: "apt update && apt -y install kali-linux-headless",
-      },
     ],
   },
 ];
