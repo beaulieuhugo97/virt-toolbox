@@ -1,0 +1,237 @@
+#!/bin/bash
+
+# Usage: edit_config_generic "title" "icon" config_definition_array (see config.env)
+edit_config_generic() {
+    local title="$1"
+    local -n config_def="$2"
+
+    while true; do
+        print_main_header
+        print_section "${title}"
+        echo ""
+
+        # Build options array
+        local config_options=("Back")
+        build_config_options config_options "${config_def[@]}"
+
+        local choice=$(choose "Select setting to edit:" "${config_options[@]}")
+
+        case "$choice" in
+            *"Back"*|"") return ;;
+            *)
+                handle_config_choice "$choice" "${config_def[@]}"
+                ;;
+        esac
+
+        pause
+    done
+}
+
+build_config_options() {
+    local -n options_ref="$1"
+    shift
+    local config_def=("$@")
+    local i=0
+
+    # Process field definitions (skip category)
+    for ((i=1; i<${#config_def[@]}; i+=5)); do
+        local display_name="${config_def[$i]}"
+        local var_name="${config_def[$((i+1))]}"
+        local var_value="${!var_name}"
+
+        options_ref+=("${display_name} (${var_value})")
+    done
+}
+
+handle_config_choice() {
+    local choice="$1"
+    shift
+    local config_def=("$@")
+    local i=0
+
+    # Find matching field definition
+    for ((i=1; i<${#config_def[@]}; i+=5)); do
+        local display_name="${config_def[$i]}"
+        local var_name="${config_def[$((i+1))]}"
+        local input_type="${config_def[$((i+2))]}"
+        local validation_rule="${config_def[$((i+3))]}"
+        local update_vars="${config_def[$((i+4))]}"
+
+        if [[ "$choice" == *"$display_name"* ]]; then
+            handle_field_update "$display_name" "$var_name" "$input_type" "$validation_rule" "$update_vars"
+            break
+        fi
+    done
+}
+
+handle_field_update() {
+    local display_name="$1"
+    local var_name="$2"
+    local input_type="$3"
+    local validation_rule="$4"
+    local update_vars="$5"
+    local current_value="${!var_name}"
+    local new_value=""
+
+    case "$input_type" in
+        "text")
+            new_value=$(input "Enter ${display_name,,}" "$current_value")
+            ;;
+        "password")
+            new_value=$(input "Enter ${display_name,,}" "$current_value")
+            ;;
+        "network_interface")
+            new_value=$(choose_network_interface)
+            local exit_code=$?
+            if [ $exit_code -ne 0 ] || [ -z "$new_value" ]; then
+                print_info "${display_name} selection cancelled or failed."
+                return
+            fi
+            ;;
+        "port")
+            new_value=$(input "Enter the port number" "$current_value")
+            ;;
+        "wordlist")
+            new_value=$(file_browser "$WORDLISTS_DIR")
+            local exit_code=$?
+            if [ $exit_code -eq 0 ] && [ -n "$new_value" ]; then
+                # Success case handled below
+                :
+            elif [ $exit_code -eq 2 ]; then
+                print_info "Wordlist operation completed. Please select ${display_name,,} again to choose the file."
+                return
+            else
+                print_info "${display_name} selection cancelled."
+                return
+            fi
+            ;;
+    esac
+
+    # Validate input
+    if ! validate_input "$new_value" "$validation_rule"; then
+        return
+    fi
+
+    # Update configuration
+    if [ -n "$new_value" ]; then
+        update_config_vars "$var_name" "$new_value" "$update_vars"
+        print_success "${display_name} updated to: $new_value"
+    fi
+}
+
+validate_input() {
+    local value="$1"
+    local rule="$2"
+
+    case "$rule" in
+        "required")
+            if [ -z "$value" ]; then
+                return 1
+            fi
+            ;;
+        "port")
+            if [ -z "$value" ] || ! [[ "$value" =~ ^[0-9]+$ ]] || [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+                print_error "Invalid port number. Please enter a value between 1-65535."
+                return 1
+            fi
+            ;;
+        "optional")
+            # Always valid
+            ;;
+    esac
+    return 0
+}
+
+update_config_vars() {
+    local primary_var="$1"
+    local new_value="$2"
+    local additional_vars="$3"
+
+    # Update primary variable
+    sed -i "s|^${primary_var}=.*|${primary_var}=\"$new_value\"|" env/config.env
+
+    # Update additional variables if specified
+    if [ -n "$additional_vars" ]; then
+        IFS=',' read -ra VARS <<< "$additional_vars"
+        for var in "${VARS[@]}"; do
+            sed -i "s/^${var}=.*/${var}=\"$new_value\"/" env/config.env
+        done
+    fi
+
+    # Reload configuration
+    source env/config.env
+}
+
+get_network_interfaces_with_names() {
+    local interfaces=()
+    local current_interface=""
+    
+    while IFS= read -r line; do
+        # Check for interface name line (starts with number and contains interface name)
+        if [[ "$line" =~ ^[0-9]+:[[:space:]]*([^:]+): ]]; then
+            current_interface="${BASH_REMATCH[1]}"
+            # Skip loopback interface
+            if [[ "$current_interface" == "lo" ]]; then
+                current_interface=""
+                continue
+            fi
+        fi
+        
+        # Check for inet line with IP address
+        if [[ -n "$current_interface" ]] && [[ "$line" =~ ^[[:space:]]*inet[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            local ip="${BASH_REMATCH[1]}"
+            # Skip loopback IPs
+            if [[ "$ip" =~ ^127\. ]]; then
+                continue
+            fi
+            # Add as a single formatted string
+            interfaces+=("$current_interface ($ip)")
+            current_interface=""  # Reset to avoid duplicates
+        fi
+    done < <(ip addr show 2>/dev/null)
+    
+    # Output each interface on a separate line to preserve formatting
+    printf '%s\n' "${interfaces[@]}"
+}
+
+choose_network_interface() {
+    # Get available interfaces using readarray to preserve formatting
+    local interfaces=()
+    readarray -t interfaces < <(get_network_interfaces_with_names)
+    
+    if [ ${#interfaces[@]} -eq 0 ]; then
+        print_warning "No network interfaces with IP addresses detected"
+        return 1
+    fi
+    
+    local choice=$(choose "Select network interface for Local IP:" "${interfaces[@]}")
+    
+    if [ -z "$choice" ]; then
+        return 1
+    fi
+    
+    # Extract IP address from selection (format: "interface (ip)")
+    if [[ "$choice" =~ \(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\) ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    else
+        print_error "Failed to extract IP address from selection"
+        return 1
+    fi
+}
+
+edit_local_config() {
+    edit_config_generic "Local Configuration" LOCAL_CONFIG_MENU
+}
+
+edit_remote_config() {
+    edit_config_generic "Remote Configuration" REMOTE_CONFIG_MENU
+}
+
+edit_ad_config() {
+    edit_config_generic "Active Directory" AD_CONFIG_MENU
+}
+
+edit_wordlist_config() {
+    edit_config_generic "Wordlists Configuration" WORDLISTS_CONFIG_MENU
+}

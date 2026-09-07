@@ -1,0 +1,960 @@
+#!/bin/bash
+
+# Load shared configuration and functions
+source "$(dirname "$0")/../../../shared"
+
+DEFAULT_VM_NAME="pwnbox"
+DEFAULT_NET_NAME="default"
+
+download_file() {
+    print_info "Select an image to download:"
+
+    local OPTIONS=(
+        "Download ParrotOS Security Edition (ISO)"
+        "Download ParrotOS HTB Edition (ISO)"
+        "Download Kali Linux (ISO)"
+        "Download Kali Linux (qcow2)"
+        "Windows 11 (Manual - Instructions)"
+        "Enter custom URL"
+    )
+
+    local CHOICE=$(choose "Select an operation:" "${OPTIONS[@]}")
+
+    case "$CHOICE" in
+        *"ParrotOS Security"*)
+            FILE_URL="https://deb.parrot.sh/parrot/iso/6.4/Parrot-security-6.4_amd64.iso"
+            ;;    
+        *"ParrotOS HTB"*)
+            FILE_URL="https://deb.parrot.sh/parrot/iso/6.4/Parrot-htb-6.4_amd64.iso"
+            ;;
+        *"Kali Linux (ISO)"*)
+            FILE_URL="https://cdimage.kali.org/kali-2025.3/kali-linux-2025.3-installer-amd64.iso"
+            ;;
+        *"Kali Linux (qcow2)"*)
+            FILE_URL="https://mirror.quantum5.ca/kali-images/kali-2025.2/kali-linux-2025.2-qemu-amd64.7z"
+            ;;
+        *"Windows 11 (Manual - Instructions)"*)
+            print_info "Windows 11 ISO Manual Download Instructions:"
+            echo ""
+            echo "1. Visit: https://www.microsoft.com/software-download/windows11"
+            echo "2. Click 'Download Windows 11 Disk Image (ISO)'"
+            echo "3. Select your edition and language"
+            echo "4. Download the ISO file"
+            echo "5. Move the ISO to: /var/lib/libvirt/images/"
+            echo "   Example: sudo mv ~/Downloads/*.iso /var/lib/libvirt/images/"
+            echo "6. Use 'Create VM from ISO' option with the file path"
+            echo ""
+            print_info "VirtIO drivers (recommended for Windows VMs):"
+            echo "   VirtIO ISO: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
+            echo "   VirtIO GTK: sudo dnf install spice-gtk-tools"
+            echo "   Save to: /var/lib/libvirt/images/"
+            echo ""
+            print_info "MS Build Tools (for compiling Windows projects):"
+            echo "   After Windows VM is set up, download and install:"
+            echo "   - VS 2015: https://aka.ms/vs/14/release/vs_buildtools.exe"
+            echo "   - VS 2017: https://aka.ms/vs/15/release/vs_buildtools.exe"
+            echo "   - VS 2019: https://aka.ms/vs/16/release/vs_buildtools.exe"
+            echo "   - VS 2022: https://aka.ms/vs/17/release/vs_buildtools.exe"
+            echo ""
+            echo "   Usage: Open 'Developer PowerShell' and run:"
+            echo "      msbuild CVE-POC.sln /p:Configuration=Release /p:Platform=x64"
+            echo ""
+            pause
+            return 0
+            ;;
+        *"Enter custom URL"*)
+            FILE_URL=$(input "What file URL to download?" "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.1.0-amd64-netinst.iso") || return
+            ;;
+        *)
+            print_error "No selection made"
+            pause
+            return 1
+            ;;
+    esac
+
+    print_info "Selected URL: $FILE_URL"
+
+    # Extract filename from URL
+    FILENAME=$(basename "$FILE_URL")
+
+    # Detect file extension and type
+    if [[ $FILENAME == *.tar.gz ]]; then
+        FILE_TYPE="tar.gz"
+    elif [[ $FILENAME == *.tar.bz2 ]]; then
+        FILE_TYPE="tar.bz2"
+    elif [[ $FILENAME == *.tar.xz ]]; then
+        FILE_TYPE="tar.xz"
+    elif [[ $FILENAME == *.tar.* ]]; then
+        FILE_TYPE="tar"
+    elif [[ $FILENAME == *.7z ]]; then
+        FILE_TYPE="7z"
+    elif [[ $FILENAME == *.zip ]]; then
+        FILE_TYPE="zip"
+    elif [[ $FILENAME == *.rar ]]; then
+        FILE_TYPE="rar"
+    elif [[ $FILENAME == *.iso ]]; then
+        FILE_TYPE="iso"
+    elif [[ $FILENAME == *.qcow2 ]]; then
+        FILE_TYPE="qcow2"
+    else
+        print_error "Unsupported file type: $FILENAME"
+        pause
+        return 1
+    fi
+
+    print_info "Detected file type: $FILE_TYPE"
+
+    # Check for existing files
+    SKIP_DOWNLOAD=false
+    SKIP_EXTRACTION=false
+
+    # For archive types, check for extracted files first
+    if [[ "$FILE_TYPE" == "7z" || "$FILE_TYPE" == "zip" || "$FILE_TYPE" == "tar.gz" || "$FILE_TYPE" == "tar.bz2" || "$FILE_TYPE" == "tar.xz" || "$FILE_TYPE" == "tar" || "$FILE_TYPE" == "rar" ]]; then
+        # Check for extracted qcow2 or iso files
+        EXTRACTED_FILES=$(find . -maxdepth 1 -type f \( -name "*.qcow2" -o -name "*.iso" \) 2>/dev/null)
+
+        if [ -n "$EXTRACTED_FILES" ]; then
+            print_warning "Extracted files found:"
+            echo ""
+            while IFS= read -r file; do
+                FILE_SIZE_HUMAN=$(du -h "$file" | cut -f1)
+                FILE_SIZE_BYTES=$(stat -c%s "$file")
+                echo "  $(basename "$file"): $FILE_SIZE_HUMAN ($FILE_SIZE_BYTES bytes)"
+            done <<< "$EXTRACTED_FILES"
+            echo ""
+
+            local FILE_OPTIONS=(
+                "Delete all and redownload"
+                "Use existing files (skip download & extraction)"
+                "Cancel operation"
+            )
+
+            local FILE_CHOICE=$(choose "What would you like to do?" "${FILE_OPTIONS[@]}")
+
+            case "$FILE_CHOICE" in
+                *"Delete all and redownload"*)
+                    print_info "Deleting existing files..."
+                    rm -f *.qcow2 *.iso "$FILENAME" 2>/dev/null
+                    ;;
+                *"Use existing files"*)
+                    print_info "Using existing files, skipping download and extraction..."
+                    SKIP_DOWNLOAD=true
+                    SKIP_EXTRACTION=true
+                    ;;
+                *"Cancel operation"*|*)
+                    print_info "Operation cancelled"
+                    pause
+                    return 0
+                    ;;
+            esac
+        # If no extracted files, check for archive file
+        elif [ -f "$FILENAME" ]; then
+            FILE_SIZE_HUMAN=$(du -h "$FILENAME" | cut -f1)
+            FILE_SIZE_BYTES=$(stat -c%s "$FILENAME")
+
+            print_warning "Archive file already exists: $FILENAME"
+            echo "  Size: $FILE_SIZE_HUMAN ($FILE_SIZE_BYTES bytes)"
+            echo ""
+
+            local FILE_OPTIONS=(
+                "Delete and redownload"
+                "Use existing archive (skip download, extract only)"
+                "Cancel operation"
+            )
+
+            local FILE_CHOICE=$(choose "What would you like to do?" "${FILE_OPTIONS[@]}")
+
+            case "$FILE_CHOICE" in
+                *"Delete and redownload"*)
+                    print_info "Deleting existing archive..."
+                    rm -f "$FILENAME"
+                    ;;
+                *"Use existing archive"*)
+                    print_info "Using existing archive, skipping download..."
+                    SKIP_DOWNLOAD=true
+                    ;;
+                *"Cancel operation"*|*)
+                    print_info "Operation cancelled"
+                    pause
+                    return 0
+                    ;;
+            esac
+        fi
+    # For non-archive types (iso, qcow2), check directly
+    elif [ -f "$FILENAME" ]; then
+        FILE_SIZE_HUMAN=$(du -h "$FILENAME" | cut -f1)
+        FILE_SIZE_BYTES=$(stat -c%s "$FILENAME")
+
+        print_warning "File already exists: $FILENAME"
+        echo "  Size: $FILE_SIZE_HUMAN ($FILE_SIZE_BYTES bytes)"
+        echo ""
+
+        local FILE_OPTIONS=(
+            "Delete and redownload"
+            "Use existing file (skip download)"
+            "Cancel operation"
+        )
+
+        local FILE_CHOICE=$(choose "What would you like to do?" "${FILE_OPTIONS[@]}")
+
+        case "$FILE_CHOICE" in
+            *"Delete and redownload"*)
+                print_info "Deleting existing file..."
+                rm -f "$FILENAME"
+                ;;
+            *"Use existing file"*)
+                print_info "Using existing file, skipping download..."
+                SKIP_DOWNLOAD=true
+                ;;
+            *"Cancel operation"*|*)
+                print_info "Operation cancelled"
+                pause
+                return 0
+                ;;
+        esac
+    fi
+
+    # Build operation commands based on file type
+    case "$FILE_TYPE" in
+        "7z")
+            if [ "$SKIP_DOWNLOAD" = true ] && [ "$SKIP_EXTRACTION" = true ]; then
+                print_command "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/"
+                operation \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true"
+            elif [ "$SKIP_DOWNLOAD" = true ]; then
+                print_command "7z x -y *.7z" "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/" "rm *.7z"
+                operation \
+                    "Extracting 7z archive..." "7z x -y *.7z" \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true" \
+                    "Removing archive..." "rm *.7z"
+            else
+                print_command "wget $FILE_URL" "7z x -y *.7z" "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/" "rm *.7z"
+                operation \
+                    "Downloading file..." "wget $FILE_URL" \
+                    "Extracting 7z archive..." "7z x -y *.7z" \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true" \
+                    "Removing archive..." "rm *.7z"
+            fi
+            ;;
+        "zip")
+            if [ "$SKIP_DOWNLOAD" = true ] && [ "$SKIP_EXTRACTION" = true ]; then
+                print_command "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/"
+                operation \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true"
+            elif [ "$SKIP_DOWNLOAD" = true ]; then
+                print_command "unzip *.zip" "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/" "rm *.zip"
+                operation \
+                    "Extracting zip archive..." "unzip *.zip" \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true" \
+                    "Removing archive..." "rm *.zip"
+            else
+                print_command "wget $FILE_URL" "unzip *.zip" "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/" "rm *.zip"
+                operation \
+                    "Downloading file..." "wget $FILE_URL" \
+                    "Extracting zip archive..." "unzip *.zip" \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true" \
+                    "Removing archive..." "rm *.zip"
+            fi
+            ;;
+        "tar.gz"|"tar.bz2"|"tar.xz"|"tar")
+            if [ "$SKIP_DOWNLOAD" = true ] && [ "$SKIP_EXTRACTION" = true ]; then
+                print_command "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/"
+                operation \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true"
+            elif [ "$SKIP_DOWNLOAD" = true ]; then
+                print_command "tar xf *.tar.*" "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/" "rm *.tar.*"
+                operation \
+                    "Extracting tar archive..." "tar xf *.tar.*" \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true" \
+                    "Removing archive..." "rm *.tar.*"
+            else
+                print_command "wget $FILE_URL" "tar xf *.tar.*" "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/" "rm *.tar.*"
+                operation \
+                    "Downloading file..." "wget $FILE_URL" \
+                    "Extracting tar archive..." "tar xf *.tar.*" \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true" \
+                    "Removing archive..." "rm *.tar.*"
+            fi
+            ;;
+        "rar")
+            if [ "$SKIP_DOWNLOAD" = true ] && [ "$SKIP_EXTRACTION" = true ]; then
+                print_command "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/"
+                operation \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true"
+            elif [ "$SKIP_DOWNLOAD" = true ]; then
+                print_command "unrar x *.rar" "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/" "rm *.rar"
+                operation \
+                    "Extracting rar archive..." "unrar x *.rar" \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true" \
+                    "Removing archive..." "rm *.rar"
+            else
+                print_command "wget $FILE_URL" "unrar x *.rar" "chmod 644 *.qcow2 *.iso 2>/dev/null || true" "sudo mv *.qcow2 *.iso /var/lib/libvirt/images/" "rm *.rar"
+                operation \
+                    "Downloading file..." "wget $FILE_URL" \
+                    "Extracting rar archive..." "unrar x *.rar" \
+                    "Setting permissions..." "chmod 644 *.qcow2 *.iso 2>/dev/null || chmod 644 *" \
+                    "Moving files to images directory..." "sudo mv *.qcow2 /var/lib/libvirt/images/ 2>/dev/null || sudo mv *.iso /var/lib/libvirt/images/ 2>/dev/null || true" \
+                    "Removing archive..." "rm *.rar"
+            fi
+            ;;
+        "iso"|"qcow2")
+            if [ "$SKIP_DOWNLOAD" = true ]; then
+                print_command "chmod 644 $FILENAME" "sudo mv $FILENAME /var/lib/libvirt/images/"
+                operation \
+                    "Setting permissions..." "chmod 644 $FILENAME" \
+                    "Moving file to images directory..." "sudo mv $FILENAME /var/lib/libvirt/images/"
+            else
+                print_command "wget $FILE_URL" "chmod 644 $FILENAME" "sudo mv $FILENAME /var/lib/libvirt/images/"
+                operation \
+                    "Downloading file..." "wget $FILE_URL" \
+                    "Setting permissions..." "chmod 644 $FILENAME" \
+                    "Moving file to images directory..." "sudo mv $FILENAME /var/lib/libvirt/images/"
+            fi
+            ;;
+    esac
+}
+
+import_vm() {
+    SUDO=$(sudo_prompt)
+
+    print_info "Enter Virtual Machine details."
+
+    VM_NAME=$(input "What VM name to use?" "$DEFAULT_VM_NAME") || return
+    pause "Press [Enter] to select the qcow2 disk..."
+    VM_DISK=$(file_browser "/var/lib/libvirt/images/")
+    VM_TYPE=$(choose "What OS type to use?" "debian11" "win11") || return
+    VM_CPU=$(input "What number of vCPUs to use?" "6") || return
+    VM_RAM=$(input "What RAM in MB to use?" "8192") || return
+    VM_NET=$(input "What network interface to use?" "virbr0") || return
+
+    print_command "$SUDO virt-install --os-variant $VM_TYPE --name $VM_NAME --ram $VM_RAM --vcpus $VM_CPU --cpu host --disk path=$VM_DISK,bus=virtio,cache=writeback --network bridge=$VM_NET,model=virtio --graphics spice,listen=0.0.0.0 --video qxl --channel spicevmc,target_type=virtio,name=com.redhat.spice.0 --console pty,target_type=serial --import"
+
+    operation \
+        "Importing Virtual Machine..." "$SUDO virt-install --os-variant $VM_TYPE --name $VM_NAME --ram $VM_RAM --vcpus $VM_CPU --cpu host --disk path=$VM_DISK,bus=virtio,cache=writeback --network bridge=$VM_NET,model=virtio --graphics spice,listen=0.0.0.0 --video qxl --channel spicevmc,target_type=virtio,name=com.redhat.spice.0 --console pty,target_type=serial --import"
+}
+
+create_vm() {
+    SUDO=$(sudo_prompt)
+
+    print_info "Enter Virtual Machine details."
+
+    VM_NAME=$(input "What VM name to use?" "$DEFAULT_VM_NAME") || return
+    pause "Press [Enter] to select the ISO file..."
+    VM_ISO=$(file_browser "/var/lib/libvirt/images/")
+    VM_TYPE=$(choose "What OS type to use?" "debian11" "win11") || return
+    VM_CPU=$(input "What number of vCPUs to use?" "8") || return
+    VM_RAM=$(input "What RAM in MB to use?" "16384") || return
+    VM_DISK_SIZE=$(input "What disk size in GB to use?" "64") || return
+    VM_DISK_PATH=$(input "What disk path to use?" "/var/lib/libvirt/images/${VM_NAME}.qcow2") || return
+    VM_NET=$(input "What network interface to use?" "virbr0") || return
+
+    # Build base virt-install command
+    VIRT_INSTALL_CMD="$SUDO virt-install --os-variant $VM_TYPE --name $VM_NAME --ram $VM_RAM --vcpus $VM_CPU --cpu host --cdrom $VM_ISO --disk path=$VM_DISK_PATH,size=$VM_DISK_SIZE,bus=virtio,cache=writeback,format=qcow2 --network bridge=$VM_NET,model=virtio --graphics spice,listen=0.0.0.0 --video qxl --channel spicevmc,target_type=virtio,name=com.redhat.spice.0 --console pty,target_type=serial"
+
+    # Check if this is a Windows VM (win in the OS type)
+    if [[ $VM_TYPE == *"win"* ]]; then
+        print_info "Windows VM detected. You may need VirtIO drivers for optimal performance."
+        USE_VIRTIO=$(input "Add VirtIO drivers ISO? (y/n)" "n") || return
+
+        if [[ $USE_VIRTIO == "y" || $USE_VIRTIO == "Y" ]]; then
+            VIRTIO_ISO=$(input "What VirtIO ISO path to use?" "/var/lib/libvirt/images/virtio-win.iso") || return
+            VIRT_INSTALL_CMD="$VIRT_INSTALL_CMD --disk path=$VIRTIO_ISO,device=cdrom"
+        fi
+    fi
+
+    print_command "$VIRT_INSTALL_CMD"
+
+    operation \
+        "Creating Virtual Machine..." "$VIRT_INSTALL_CMD"
+}
+
+list_vm() {
+    SUDO=$(sudo_prompt)
+
+    print_command "virsh list --all"
+
+    operation \
+        "Listing Virtual Machines..." "$SUDO virsh list --all"
+}
+
+start_vm() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to start?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virsh start $VM_NAME"
+
+    operation \
+         "Starting Virtual Machine..." "$SUDO virsh start $VM_NAME"
+}
+
+suspend_vm() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to suspend?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virsh suspend $VM_NAME"
+
+    operation \
+        "Suspending Virtual Machine..." "$SUDO virsh suspend $VM_NAME"
+}
+
+resume_vm() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to resume?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virsh resume $VM_NAME"
+
+    operation \
+        "Resuming Virtual Machine..." "$SUDO virsh resume $VM_NAME"
+}
+
+reboot_vm() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to reboot?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virsh reboot $VM_NAME"
+
+    operation \
+        "Rebooting Virtual Machine..." "$SUDO virsh reboot $VM_NAME"
+}
+
+stop_vm() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to stop?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virsh shutdown $VM_NAME"
+
+    operation \
+        "Stopping Virtual Machine..." "$SUDO virsh shutdown $VM_NAME"
+}
+
+force_stop_vm() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to force stop?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virsh destroy $VM_NAME"
+
+    operation \
+        "Force stopping Virtual Machine..." "$SUDO virsh destroy $VM_NAME"
+}
+
+force_reset_vm() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to force reset?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virsh reset $VM_NAME"
+
+    operation \
+        "Force resetting Virtual Machine..." "$SUDO virsh reset $VM_NAME"
+}
+
+destroy_vm() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to destroy?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virsh destroy $VM_NAME" "virsh undefine $VM_NAME"
+
+    operation \
+        "Destroying Virtual Machine..." "$SUDO virsh destroy $VM_NAME" \
+        "Deleting Virtual Machine..." "$SUDO virsh undefine $VM_NAME"
+}
+
+viewer_connection() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to connect to?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virt-viewer $VM_NAME"
+
+    operation \
+        "Connecting to Virtual Machine..." "$SUDO virt-viewer $VM_NAME"
+}
+
+list_snapshots() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to list snapshots for?" "$DEFAULT_VM_NAME") || return
+
+    print_command "virsh snapshot-list $VM_NAME"
+
+    operation \
+        "Listing VM Snapshots..." "$SUDO virsh snapshot-list $VM_NAME"
+}
+
+create_snapshot() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to snapshot?" "$DEFAULT_VM_NAME") || return
+    SNAPSHOT_NAME=$(input "What snapshot name to use?" "$(date +%Y-%m-%d)") || return
+    SNAPSHOT_DESC=$(input "What snapshot description to use?" "$(date +%Y%m%d-%H%M)") || return
+
+    print_command "virsh snapshot-create-as $VM_NAME $SNAPSHOT_NAME "$SNAPSHOT_DESC""
+
+    operation \
+        "Creating VM Snapshot..." "$SUDO virsh snapshot-create-as $VM_NAME $SNAPSHOT_NAME "$SNAPSHOT_DESC""
+}
+
+revert_snapshot() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to revert?" "$DEFAULT_VM_NAME") || return
+    SNAPSHOT_NAME=$(input "What snapshot name to revert to?" "$(date +%Y-%m-%d)") || return
+
+    print_command "virsh snapshot-revert $VM_NAME $SNAPSHOT_NAME"
+
+    operation \
+        "Reverting VM to Snapshot..." $SUDO virsh snapshot-revert $VM_NAME $SNAPSHOT_NAME
+}
+
+delete_snapshot() {
+    SUDO=$(sudo_prompt)
+
+    VM_NAME=$(input "What VM name to delete snapshot from?" "$DEFAULT_VM_NAME") || return
+    SNAPSHOT_NAME=$(input "What snapshot name to delete?" "$(date +%Y-%m-%d)") || return
+
+    print_command "virsh snapshot-delete $VM_NAME $SNAPSHOT_NAME"
+
+    operation \
+        "Deleting VM Snapshot..." $SUDO virsh snapshot-delete $VM_NAME $SNAPSHOT_NAME
+}
+
+create_bridged_network() {
+    print_info "This feature is currently in development."
+    pause
+}
+
+create_nat_network() {
+    SUDO=$(sudo_prompt)
+
+    NET_NAME=$(input "What network name to use?" "nat") || return
+    NET_IP=$(input "What router IP to use?" "172.16.1.1") || return
+    NET_MASK=$(input "What subnet mask to use?" "255.255.255.0") || return
+    NET_DHCP_START=$(input "What DHCP start address to use?" "172.16.1.10") || return
+    NET_DHCP_END=$(input "What DHCP end address to use?" "172.16.1.100") || return
+
+    print_command "virsh net-define"
+
+    operation \
+        "Creating Network..." "$SUDO virsh net-define /dev/stdin <<EOF
+        <network>
+            <name>$NET_NAME</name>
+            <forward mode='nat'/>
+            <bridge name='virbr-$NET_NAME'/>
+            <ip address='$NET_IP' netmask='$NET_MASK'>
+                <dhcp>
+                    <range start='$NET_DHCP_START' end='$NET_DHCP_END'/>
+                </dhcp>
+            </ip>
+        </network>
+EOF"
+
+    print_info "Configuring Network start-up parameters."
+    print_command "virsh net-autostart default" "virsh net-start $NET_NAME"
+    operation \
+        "Enabling Network autostart..." "$SUDO virsh net-autostart $NET_NAME" \
+        "Starting Network..." "$SUDO virsh net-start $NET_NAME"
+
+    print_info "Configuring Firewall to allow forwarding for virbr-$NET_NAME interface."
+    print_command "sudo iptables -I FORWARD -i 'virbr-$NET_NAME' -j ACCEPT" "sudo iptables -I FORWARD -o 'virbr-$NET_NAME' -j ACCEPT"
+    operation \
+        "Adding 'Allow traffic FROM VMs' rule..." "sudo iptables -I FORWARD -i 'virbr-$NET_NAME' -j ACCEPT" \
+        "Adding 'Allow traffic TO VMs' rule..." "sudo iptables -I FORWARD -o 'virbr-$NET_NAME' -j ACCEPT" \
+        "Saving current iptables rules..." "sudo iptables-save | sudo tee /etc/sysconfig/iptables > /dev/null"
+}
+
+create_host_only_network() {
+    SUDO=$(sudo_prompt)
+
+    NET_NAME=$(input "What network name to use?" "host") || return
+    NET_IP=$(input "What router IP to use?" "192.168.100.1") || return
+    NET_MASK=$(input "What subnet mask to use?" "255.255.255.0") || return
+    NET_DHCP_START=$(input "What DHCP start address to use?" "192.168.100.10") || return
+    NET_DHCP_END=$(input "What DHCP end address to use?" "192.168.100.50") || return
+
+    print_command "virsh net-define"
+
+    operation \
+        "Creating Network..." "$SUDO virsh net-define /dev/stdin <<EOF
+        <network>
+            <name>$NET_NAME</name>
+            <bridge name='virbr-$NET_NAME' stp='on' delay='0'/>
+            <ip address='$NET_IP' netmask='$NET_MASK'>
+                <dhcp>
+                    <range start='$NET_DHCP_START' end='$NET_DHCP_END'/>
+                </dhcp>
+            </ip>
+        </network>
+EOF"
+}
+
+create_isolated_network() {
+    SUDO=$(sudo_prompt)
+
+    NET_NAME=$(input "What network name to use?" "host") || return
+    NET_IP=$(input "What router IP to use?" "10.0.1.1") || return
+    NET_MASK=$(input "What subnet mask to use?" "255.255.255.0") || return
+    NET_DHCP_START=$(input "What DHCP start address to use?" "10.0.1.10") || return
+    NET_DHCP_END=$(input "What DHCP end address to use?" "10.0.1.100") || return
+
+    print_command "virsh net-define"
+    
+    operation \
+        "Creating Network..." "$SUDO virsh net-define /dev/stdin <<EOF
+        <network>
+            <name>$NET_NAME</name>
+            <bridge name='virbr-$NET_NAME' stp='on' delay='0'/>
+            <ip address='$NET_IP' netmask='$NET_MASK'>
+                <dhcp>
+                    <range start='$NET_DHCP_START' end='$NET_DHCP_END'/>
+                </dhcp>
+            </ip>
+        </network>
+EOF"
+}
+
+list_networks() {
+    SUDO=$(sudo_prompt)
+
+    print_command "virsh net-list --all"
+
+    operation \
+        "Listing Networks..." "$SUDO virsh net-list --all"
+}
+
+about_network() {
+    SUDO=$(sudo_prompt)
+
+    NET_NAME=$(input "What network name to query?" "$DEFAULT_NET_NAME") || return
+
+    print_command "virsh net-info $NET_NAME"
+
+    operation \
+        "Getting info about Network..." "$SUDO virsh net-info $NET_NAME"
+}
+
+start_network() {
+    SUDO=$(sudo_prompt)
+
+    NET_NAME=$(input "What network name to start?" "$DEFAULT_NET_NAME") || return
+
+    print_command "virsh net-start $NET_NAME"
+
+    operation \
+        "Starting Network..." "$SUDO virsh net-start $NET_NAME"
+}
+
+stop_network() {
+    SUDO=$(sudo_prompt)
+
+    NET_NAME=$(input "What network name to stop?" "$DEFAULT_NET_NAME") || return
+
+    print_command "virsh net-destroy $NET_NAME"
+
+    operation \
+        "Stopping Network..." "$SUDO virsh net-destroy $NET_NAME"
+}
+
+destroy_network() {
+    SUDO=$(sudo_prompt)
+
+    NET_NAME=$(input "What network name to destroy?" "$DEFAULT_NET_NAME") || return
+
+    print_command "virsh net-destroy $NET_NAME" "virsh net-undefine $NET_NAME"
+
+    operation \
+        "Stopping Network..." "$SUDO virsh net-destroy $NET_NAME" \
+        "Destroying Network..." "$SUDO virsh net-undefine $NET_NAME"
+
+    print_info "Cleaning up Firewall rules."
+
+    print_command "sudo iptables -D FORWARD -i 'virbr-$NET_NAME' -j ACCEPT" "sudo iptables -D FORWARD -o 'virbr-$NET_NAME' -j ACCEPT"
+
+    operation \
+        "Deleting 'Allow traffic FROM VMs' rule..." "sudo iptables -D FORWARD -i 'virbr-$NET_NAME' -j ACCEPT" \
+        "Deleting 'Allow traffic TO VMs' rule..." "sudo iptables -D FORWARD -o 'virbr-$NET_NAME' -j ACCEPT" \
+        "Saving current iptables rules..." "sudo iptables-save | sudo tee /etc/sysconfig/iptables > /dev/null"        
+}
+
+list_dhcp_leases() {
+    SUDO=$(sudo_prompt)
+
+    NET_NAME=$(input "What network name to query?" "$DEFAULT_NET_NAME") || return
+
+    print_command "virsh net-dhcp-leases $NET_NAME"
+
+    operation \
+        "Listing DHCP Leases..." "$SUDO virsh net-dhcp-leases $NET_NAME"
+}
+
+list_network_interfaces() {
+    print_command "ip addr show | grep virbr"
+
+    operation \
+        "Listing Network Interfaces..." "ip addr show | grep virbr"
+}
+
+manage_ip_forwarding() {
+    SUDO=$(sudo_prompt)
+
+    NET_NAME=$(input "What network name to configure?" "nat") || return
+
+    print_info "Select IP forwarding action:"
+
+    local OPTIONS=(
+        "Enable IP Forwarding"
+        "Disable IP Forwarding"
+    )
+
+    local CHOICE=$(choose "Select an operation:" "${OPTIONS[@]}")
+
+    case "$CHOICE" in
+        *"Enable"*)
+            print_command "sudo iptables -I FORWARD -i 'virbr-$NET_NAME' -j ACCEPT" "sudo iptables -I FORWARD -o 'virbr-$NET_NAME' -j ACCEPT"
+
+            operation \
+                "Adding 'Allow traffic FROM VMs' rule..." "sudo iptables -I FORWARD -i 'virbr-$NET_NAME' -j ACCEPT" \
+                "Adding 'Allow traffic TO VMs' rule..." "sudo iptables -I FORWARD -o 'virbr-$NET_NAME' -j ACCEPT" \
+                "Saving current iptables rules..." "sudo iptables-save | sudo tee /etc/sysconfig/iptables > /dev/null"
+            ;;
+        *"Disable"*)
+            print_command "sudo iptables -D FORWARD -i 'virbr-$NET_NAME' -j ACCEPT" "sudo iptables -D FORWARD -o 'virbr-$NET_NAME' -j ACCEPT"
+
+            operation \
+                "Removing 'Allow traffic FROM VMs' rule..." "sudo iptables -D FORWARD -i 'virbr-$NET_NAME' -j ACCEPT" \
+                "Removing 'Allow traffic TO VMs' rule..." "sudo iptables -D FORWARD -o 'virbr-$NET_NAME' -j ACCEPT" \
+                "Saving current iptables rules..." "sudo iptables-save | sudo tee /etc/sysconfig/iptables > /dev/null"
+            ;;
+        *)
+            print_error "No selection made"
+            pause
+            return 1
+            ;;
+    esac
+}
+
+image_operations_menu() {
+    while true; do
+        print_header "VIRSH"
+
+        local OPTIONS=(
+            "Download File (ISO/Image)"
+            "Import VM from Image"
+            "Create VM from ISO"
+            "Back"
+        )
+
+        local CHOICE=$(choose "Select an operation:" "${OPTIONS[@]}")
+
+        case "$CHOICE" in
+            *"Download File"*) download_file ;;
+            *"Import VM from Image"*) import_vm ;;
+            *"Create VM from ISO"*) create_vm ;;
+            *"Back"*|"")
+                break
+                ;;
+        esac
+    done
+}
+
+connect_operations_menu() {
+    while true; do
+        print_header "VIRSH"
+
+        local OPTIONS=(
+            "Connect with Viewer"
+            "Back"
+        )
+        
+        local CHOICE=$(choose "Select an operation:" "${OPTIONS[@]}")
+        
+        case "$CHOICE" in
+            *"Connect with Viewer"*) viewer_connection ;;
+            *"Back"*|"")
+                break
+                ;;
+        esac
+    done
+}
+
+vm_operations_menu() {
+    while true; do
+        print_header "VIRSH"
+
+        local OPTIONS=(
+            "List VM"
+            "Start VM"
+            "Suspend VM"
+            "Resume VM"
+            "Reboot VM"
+            "Stop VM"
+            "Force Stop VM"
+            "Force Reset VM"
+            "Destroy VM"
+            "Connect to VM"
+            "Back"
+        )
+
+        local CHOICE=$(choose "Select an operation:" "${OPTIONS[@]}")
+
+        case "$CHOICE" in
+            *"List VM"*) list_vm ;;
+            *"Start VM"*) start_vm ;;
+            *"Suspend VM"*) suspend_vm ;;
+            *"Resume VM"*) resume_vm ;;
+            *"Reboot VM"*) reboot_vm ;;
+            *"Stop VM"*) stop_vm ;;
+            *"Force Stop VM"*) force_stop_vm ;;
+            *"Force Reset VM"*) force_reset_vm ;;
+            *"Destroy VM"*) destroy_vm ;;
+            *"Connect to VM"*) connect_operations_menu ;;
+            *"Back"*|"")
+                break
+                ;;
+        esac
+    done
+}
+
+snapshot_operations_menu() {
+    while true; do
+        print_header "VIRSH"
+
+        local OPTIONS=(
+            "List VM Snapshots"
+            "Create VM Snapshot"
+            "Revert VM to Snapshot"
+            "Delete VM Snapshot"
+            "Back"
+        )
+        
+        local CHOICE=$(choose "Select an operation:" "${OPTIONS[@]}")
+        
+        case "$CHOICE" in
+            *"List VM Snapshots"*) list_snapshots ;;
+            *"Create VM Snapshot"*) create_snapshot ;;
+            *"Revert VM to Snapshot"*) revert_snapshot ;;
+            *"Delete VM Snapshot"*) delete_snapshot ;;
+            *"Back"*|"")
+                break
+                ;;
+        esac
+    done
+}
+
+create_network_operations_menu() {
+    while true; do
+        print_header "VIRSH"
+
+        local OPTIONS=(
+            "Create Bridged Network"
+            "Create NAT Network"
+            "Create Host Only Network"
+            "Create Isolated Network"
+            "Back"
+        )
+        
+        local CHOICE=$(choose "Select an operation:" "${OPTIONS[@]}")
+        
+        case "$CHOICE" in
+            *"Create Bridged Network"*) create_bridged_network ;;        
+            *"Create NAT Network"*) create_nat_network ;;
+            *"Create Host Only Network"*) create_host_only_network ;;
+            *"Create Isolated Network"*) create_isolated_network ;;
+            *"Back"*|"")
+                break
+                ;;
+        esac
+    done    
+}
+
+network_operations_menu() {
+    while true; do
+        print_header "VIRSH"
+
+        local OPTIONS=(
+            "List Networks"
+            "Create Network"
+            "About Network"
+            "Start Network"
+            "Stop Network"
+            "Destroy Network"
+            "List DHCP Leases"
+            "List Network Interfaces"
+            "Manage IP Forwarding"
+            "Back"
+        )
+
+        local CHOICE=$(choose "Select an operation:" "${OPTIONS[@]}")
+
+        case "$CHOICE" in
+            *"List Networks"*) list_networks ;;
+            *"Create Network"*) create_network_operations_menu ;;
+            *"About Network"*) about_network ;;
+            *"Start Network"*) start_network ;;
+            *"Stop Network"*) stop_network ;;
+            *"Destroy Network"*) destroy_network ;;
+            *"List DHCP Leases"*) list_dhcp_leases ;;
+            *"List Network Interfaces"*) list_network_interfaces ;;
+            *"Manage IP Forwarding"*) manage_ip_forwarding ;;
+            *"Back"*|"")
+                break
+                ;;
+        esac
+    done
+}
+
+main_menu() {
+    while true; do
+        print_header "VIRSH"
+
+        local OPTIONS=(
+            "Images"
+            "Virtual Machines"
+            "Snapshots"
+            "Networks"
+            "Exit"
+        )
+        
+        local CHOICE=$(choose "Select an operation:" "${OPTIONS[@]}")
+        
+        case "$CHOICE" in
+            *"Images"*) image_operations_menu ;;
+            *"Virtual Machines"*) vm_operations_menu ;;
+            *"Snapshots"*) snapshot_operations_menu ;;
+            *"Networks"*) network_operations_menu ;;
+            *"Exit"*|"")
+                print_header "VIRSH"
+                echo -e "${COLOR_SUCCESS}$(get_random_exit_message)${RESET}"
+                echo ""
+                exit 0
+                ;;
+        esac
+    done
+}
+
+# Main execution (only when script is run directly, not sourced)
+if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
+    check_deps "virsh" "virt-install" "virt-viewer" "virt-manager" "7z" "unzip" "unrar" "iptables-save"
+    check_rpm "spice-gtk-tools"
+    setup_directory "libvirt"
+    check_service "libvirtd"
+    check_group "libvirt"
+    main_menu
+fi

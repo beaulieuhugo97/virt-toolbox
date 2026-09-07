@@ -1,0 +1,270 @@
+{
+  "name": "virt-toolbox",
+  "displayName": "Virtualization Toolbox",
+  "description": "Drive libvirt/KVM from guided VS Code forms — list, create (virt-install), snapshot and manage virsh VMs, wire up libvirt networks, and spin throwaway docker containers. Review the exact command, then run it.",
+  "version": "1.0.0",
+  "publisher": "hugoquebec",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "icon": "media/icon-128.png",
+  "galleryBanner": {
+    "color": "#141d2b",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/beaulieuhugo97/virt-toolbox"
+  },
+  "homepage": "https://github.com/beaulieuhugo97/virt-toolbox#readme",
+  "bugs": {
+    "url": "https://github.com/beaulieuhugo97/virt-toolbox/issues"
+  },
+  "qna": false,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "virtualization",
+    "libvirt",
+    "virsh",
+    "kvm",
+    "docker"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "virtToolbox",
+          "title": "Virtualization Toolbox",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "virtToolbox": [
+        {
+          "id": "virtToolboxTools",
+          "name": "Tools",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "virtToolboxTools",
+        "contents": "Welcome to the Virtualization Toolbox.\n[Open the dashboard](command:virtToolbox.home)\nPick a tool from the tree, or start from the home page."
+      }
+    ],
+    "commands": [
+      {
+        "command": "virtToolbox.findTool",
+        "title": "Find Tool",
+        "category": "Virtualization Toolbox",
+        "icon": "$(search)"
+      },
+      {
+        "command": "virtToolbox.home",
+        "title": "Home",
+        "category": "Virtualization Toolbox",
+        "icon": "$(home)"
+      },
+      {
+        "command": "virtToolbox.openTool",
+        "title": "Open Tool",
+        "category": "Virtualization Toolbox"
+      },
+      {
+        "command": "virtToolbox.toggleFavorite",
+        "title": "Toggle Favorite",
+        "category": "Virtualization Toolbox",
+        "icon": "$(star)"
+      },
+      {
+        "command": "virtToolbox.openConfig",
+        "title": "Configuration",
+        "category": "Virtualization Toolbox",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "virtToolbox.history",
+        "title": "Run History",
+        "category": "Virtualization Toolbox",
+        "icon": "$(history)"
+      },
+      {
+        "command": "virtToolbox.refresh",
+        "title": "Refresh Tools",
+        "category": "Virtualization Toolbox",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "virtToolbox.toggleTheme",
+        "title": "Toggle Panel Theme (Adaptive / HTB)",
+        "category": "Virtualization Toolbox",
+        "icon": "$(color-mode)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "virtToolbox.findTool",
+          "when": "view == virtToolboxTools",
+          "group": "navigation@0"
+        },
+        {
+          "command": "virtToolbox.home",
+          "when": "view == virtToolboxTools",
+          "group": "navigation@1"
+        },
+        {
+          "command": "virtToolbox.history",
+          "when": "view == virtToolboxTools",
+          "group": "navigation@2"
+        },
+        {
+          "command": "virtToolbox.openConfig",
+          "when": "view == virtToolboxTools",
+          "group": "navigation@3"
+        },
+        {
+          "command": "virtToolbox.refresh",
+          "when": "view == virtToolboxTools",
+          "group": "navigation@4"
+        },
+        {
+          "command": "virtToolbox.toggleTheme",
+          "when": "view == virtToolboxTools",
+          "group": "navigation@5"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "virtToolbox.toggleFavorite",
+          "when": "view == virtToolboxTools && viewItem =~ /virtTool/",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "virtToolbox.openTool",
+          "when": "false"
+        },
+        {
+          "command": "virtToolbox.toggleFavorite",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "virtToolbox.findTool",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v"
+      }
+    ],
+    "configuration": {
+      "title": "Virtualization Toolbox",
+      "properties": {
+        "virtToolbox.theme": {
+          "type": "string",
+          "enum": [
+            "adaptive",
+            "htb"
+          ],
+          "enumDescriptions": [
+            "Blend into the active VS Code color theme (light or dark).",
+            "Use the bold Hack The Box green-on-navy look regardless of the VS Code theme."
+          ],
+          "default": "adaptive",
+          "description": "How the Virtualization Toolbox panel is colored."
+        },
+        "virtToolbox.autoOpenHome": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the Virtualization Toolbox dashboard automatically the first time the Tools view is revealed."
+        }
+      }
+    },
+    "walkthroughs": [
+      {
+        "id": "getStarted",
+        "title": "Get started with Virtualization Toolbox",
+        "description": "Find a tool, review the command, run it, and manage your VMs.",
+        "steps": [
+          {
+            "id": "findTool",
+            "title": "Find a tool",
+            "description": "Press Ctrl+Alt+V (Cmd+Alt+V on macOS) or use the search icon to fuzzy-find any tool by name.\n[Find a Tool](command:virtToolbox.findTool)",
+            "media": {
+              "markdown": "media/walkthrough/find-tool.md"
+            },
+            "completionEvents": [
+              "onCommand:virtToolbox.findTool"
+            ]
+          },
+          {
+            "id": "virsh",
+            "title": "Manage your VMs",
+            "description": "Open the virsh tool to list, start, snapshot and manage libvirt VMs. The libvirtd badge shows whether the service is running (with a Start button).\n[Open the virsh tool](command:virtToolbox.openTool?%5B%22virsh%22%5D)",
+            "media": {
+              "markdown": "media/walkthrough/virsh.md"
+            },
+            "completionEvents": [
+              "onCommand:virtToolbox.openTool"
+            ]
+          },
+          {
+            "id": "run",
+            "title": "Review & run the command",
+            "description": "Fill in the form, review the exact command the toolbox will run, then Run. Interactive libvirt commands run in a real terminal so sudo prompts work.\n[Open the dashboard](command:virtToolbox.home)",
+            "media": {
+              "markdown": "media/walkthrough/run.md"
+            }
+          },
+          {
+            "id": "history",
+            "title": "Check run history",
+            "description": "Every run is saved. Re-run a command or open its output file from the Run History view.\n[Open Run History](command:virtToolbox.history)",
+            "media": {
+              "markdown": "media/walkthrough/history.md"
+            },
+            "completionEvents": [
+              "onCommand:virtToolbox.history"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "npx tsx test/webview.ts && npx tsx test/contributions.ts && npx tsx test/manifest.ts",
+    "test:manifest": "npx tsx test/manifest.ts",
+    "test:syntax": "npx tsx test/run-commands.ts",
+    "package": "vsce package --no-dependencies -o virt-toolbox.vsix"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.2",
+    "esbuild": "^0.20.2",
+    "jsdom": "^29.1.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.0"
+  },
+  "//overrides": "@vscode/vsce pulls @azure/identity ^4.1.0, whose latest (4.13+) requires Node >=22 and floods `npm install` with EBADENGINE on the Node 20 shipped by Kali/Parrot. vsce only needs @azure/identity for the Marketplace publish path (not `vsce package`), so pin it to the last Node 18/20-compatible release.",
+  "overrides": {
+    "@azure/identity": "4.10.0"
+  }
+}
