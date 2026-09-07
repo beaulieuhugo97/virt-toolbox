@@ -250,7 +250,6 @@
     "typecheck": "tsc --noEmit",
     "test": "npx tsx test/webview.ts && npx tsx test/contributions.ts && npx tsx test/manifest.ts",
     "test:manifest": "npx tsx test/manifest.ts",
-    "test:syntax": "npx tsx test/run-commands.ts",
     "package": "vsce package --no-dependencies -o virt-toolbox.vsix"
   },
   "devDependencies": {

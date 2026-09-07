@@ -20,8 +20,9 @@ export function timestamp(d = new Date()): string {
 /**
  * Field ids currently visible given the field state. Visibility cascades: a
  * field whose `when` references a *hidden* field sees that field's value as
- * absent (""), so e.g. nmap's -sV/-O/-sC (gated on `modeTcp == "-sS"`) vanish
- * once UDP hides `modeTcp`, even though modeTcp keeps its stale value. Computed
+ * absent (""), so e.g. the VirtIO ISO field (gated on a Windows `cOsVariant`)
+ * vanishes once a Linux variant is picked, even though it keeps its stale value.
+ * Computed
  * to a fixpoint (fields form an acyclic dependency graph in practice).
  */
 export function visibleFieldIds(fields: Field[], state: Record<string, string>): Set<string> {
@@ -92,7 +93,8 @@ function fieldToken(field: Field, state: Record<string, string>, visible: Set<st
   }
   // File paths come from the native picker and routinely contain spaces, so quote
   // them to keep a path a single argument. Flag-bundle tokens (select/segment,
-  // e.g. nmap's "--top-ports 100") must stay unquoted so they word-split, hence
+  // e.g. a "--network bridge=virbr0,model=virtio" pair) must stay unquoted so
+  // they word-split, hence
   // this is scoped to `file`. Empty stays "" so [[…]] optional groups still drop.
   if (field.type === "file" && value !== "") {
     return shellQuote(value);

@@ -1,8 +1,8 @@
 // Virtualization Toolbox webview front-end.
 // One form engine renders any tool from its serialized manifest; an output view
-// streams captured runs and renders parsed tables; a config panel and the kape
-// custom panel reuse the same primitives. The webview never builds a command —
-// it displays the host-resolved string and asks the host to run it.
+// streams captured runs and renders parsed tables; the home, config and history
+// views reuse the same primitives. The webview never builds a command — it
+// displays the host-resolved string and asks the host to run it.
 (function () {
   "use strict";
   const vscode = acquireVsCodeApi();
@@ -62,8 +62,6 @@
     "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.6-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.49.49 0 00-.49-.42h-3.84a.49.49 0 00-.49.42l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.6.22L2.74 8.87a.49.49 0 00.12.61l2.03 1.58c-.05.3-.07.62-.07.94 0 .32.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.13.24.41.33.6.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.06.24.26.42.49.42h3.84c.24 0 .44-.18.49-.42l.36-2.54c.59-.24 1.12-.56 1.62-.94l2.39.96c.23.09.51 0 .6-.22l1.92-3.32a.49.49 0 00-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 110-7.2 3.6 3.6 0 010 7.2z";
   const ICON_HISTORY =
     "M13 3a9 9 0 00-9 9H1l3.89 3.89.07.14L9 12H6a7 7 0 117 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.99 8.99 0 0013 21a9 9 0 000-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z";
-  const ICON_SYNC =
-    "M12 4V1L8 5l4 4V6a6 6 0 015.2 8.98l1.46 1.46A8 8 0 0012 4zm0 14a6 6 0 01-5.2-8.98L5.34 7.56A8 8 0 0012 20v3l4-4-4-4v3z";
   function statusLine(cls, label) {
     return el("div", { class: "run-status " + (cls || "") }, [spinner(), document.createTextNode(" " + label)]);
   }
@@ -566,7 +564,7 @@
     return box;
   }
 
-  // ---- gate badges (deps / venv / service / group) ---------------------------
+  // ---- gate badges (deps / service / group) ----------------------------------
   function badge(box, ok, text) {
     box.appendChild(el("span", { class: "dep-badge " + (ok ? "ok" : "missing"), text: (ok ? "✓ " : "✗ ") + text }));
   }
@@ -583,7 +581,6 @@
       const b = el("span", { class: "dep-badge " + (v.ok ? "ok" : "missing"), text: (v.ok ? "✓ " : "✗ ") + v.label, title: v.hint || "" });
       box.appendChild(b);
     });
-    if (g.venv) badge(box, g.venv.present, g.venv.present ? "venv ready" : "venv missing — run Install");
     if (g.service) {
       badge(box, g.service.active, g.service.name + (g.service.active ? " running" : " stopped"));
       if (!g.service.active) box.appendChild(el("button", { class: "gate-btn", type: "button", text: "Start", onclick: () => vscode.postMessage({ type: "startService", service: g.service.name }) }));
@@ -612,35 +609,6 @@
     hero.appendChild(heroBody);
     root.appendChild(hero);
 
-    // Host mode: this machine is not a Debian attack box, so most of the
-    // toolbox is hidden rather than offered and then failing on `apt install`.
-    const host = m.host;
-    if (host) {
-      const banner = el("div", { class: "host-banner" });
-      const body = el("div", { class: "host-banner-body" });
-      body.appendChild(el("div", { class: "host-banner-title", text: "Host mode — " + host.name }));
-      body.appendChild(
-        el("div", {
-          class: "host-banner-text",
-          text:
-            "Showing the " + host.shown + " of " + host.total +
-            " tools that run outside a Parrot/Kali attack box: the hypervisor controls, lab connectivity, and the offline converters. " +
-            "The rest install with apt or ship only in the Parrot/Kali repos — run those inside the attack VM.",
-        })
-      );
-      banner.appendChild(body);
-      banner.appendChild(
-        el("button", {
-          class: "gate-btn",
-          type: "button",
-          title: "List every tool anyway — installs and some binaries will not work here",
-          text: "Show all tools",
-          onclick: () => vscode.postMessage({ type: "showAllTools" }),
-        })
-      );
-      root.appendChild(banner);
-    }
-
     const stats = el("div", { class: "stat-row" });
     [
       { n: s.toolCount || 0, l: "tools" },
@@ -661,24 +629,6 @@
     ]));
     links.appendChild(el("button", { class: "run-secondary home-link", type: "button", onclick: () => vscode.postMessage({ type: "openHistory" }) }, [
       svgIcon(ICON_HISTORY), document.createTextNode("Run history"),
-    ]));
-    // Self-update: pulls the git checkout the VSIX was built from, rebuilds it
-    // and reinstalls. Highlighted when the host's last check found new commits.
-    const upd = m.update || {};
-    links.appendChild(el("button", {
-      class: (upd.available ? "run" : "run-secondary") + " home-link",
-      type: "button",
-      title: upd.available
-        ? "New commits on GitHub — pull, rebuild and reinstall the extension"
-        : "Pull the latest version from GitHub, rebuild and reinstall",
-      onclick: () => vscode.postMessage({ type: "update" }),
-    }, [
-      svgIcon(ICON_SYNC),
-      document.createTextNode(
-        upd.available
-          ? "Update available" + (upd.latest ? " → v" + upd.latest : "")
-          : "Update extension" + (upd.current ? " (v" + upd.current + ")" : "")
-      ),
     ]));
     root.appendChild(links);
 
@@ -845,254 +795,6 @@
     app.appendChild(root);
   }
 
-  // ---- kape custom panel (M3) ------------------------------------------------
-  // A bespoke panel behind the customPanel escape hatch. It talks to the host
-  // over the generic customAction/customResult RPC. Buttons carry an `action`
-  // (routed to the host KapePanel) whose result table renders in the shared
-  // output area. "Change KAPE directory" leads; no quick reference; no
-  // "Search for specific file".
-  function callCustom(action, payload) {
-    vscode.postMessage({ type: "customAction", action, payload: payload || {} });
-  }
-  function callKape(action, payload) {
-    const out = document.getElementById("custom-output");
-    if (out) { clear(out); out.appendChild(statusLine("", "Working…")); }
-    vscode.postMessage({ type: "customAction", action, payload: payload || {} });
-  }
-  function renderKape(label, state) {
-    clear(app);
-    const root = el("div", { class: "kape" });
-    root.appendChild(el("h1", { text: label }));
-    root.appendChild(el("div", { class: "crumbs", text: "Forensics/Windows — custom panel" }));
-
-    const dirRow = el("div", { class: "kape-dir" });
-    dirRow.appendChild(el("button", { class: "run", type: "button", text: "Change KAPE directory", onclick: () => callKape("pickDir") }));
-    dirRow.appendChild(el("span", { class: "kape-dir-val", id: "kape-dir-val", text: (state && state.dir) || "No directory selected" }));
-    root.appendChild(dirRow);
-
-    // File activity
-    const fa = el("div", { class: "config-group" });
-    fa.appendChild(el("h2", { text: "File activity" }));
-    const controls = el("div", { class: "kape-controls" });
-    controls.appendChild(el("label", { text: "Date filter (YYYY-MM-DD, optional)" }));
-    const date = el("input", { type: "text", id: "kape-date", placeholder: "e.g. 2025-05-30" });
-    controls.appendChild(date);
-    const faBtns = el("div", { class: "btn-row" });
-    faBtns.appendChild(el("button", { class: "run", type: "button", text: "Recently created files", onclick: () => callKape("recent", { kind: "created", dateFilter: date.value.trim() }) }));
-    faBtns.appendChild(el("button", { class: "run", type: "button", text: "Recently modified files", onclick: () => callKape("recent", { kind: "modified", dateFilter: date.value.trim() }) }));
-    faBtns.appendChild(el("button", { class: "run", type: "button", text: "Parse recent documents", onclick: () => callKape("recentDocs") }));
-    controls.appendChild(faBtns);
-    fa.appendChild(controls);
-    root.appendChild(fa);
-
-    // Network analysis
-    const net = el("div", { class: "config-group" });
-    net.appendChild(el("h2", { text: "Network analysis" }));
-    const netBtns = el("div", { class: "btn-row" });
-    netBtns.appendChild(el("button", { class: "run", type: "button", text: "DHCP leases", onclick: () => callKape("dhcp") }));
-    net.appendChild(netBtns);
-    root.appendChild(net);
-
-    root.appendChild(el("div", { class: "output", id: "custom-output" }));
-
-    const note = el("div", { class: "note" });
-    note.appendChild(el("span", { text: "Recent-document filenames are UTF-16LE decoded; DHCP leases have their unix timestamps formatted and DhcpNetworkHint decoded. Registry-backed actions require RECmd (Eric Zimmerman tools)." }));
-    root.appendChild(note);
-
-    app.appendChild(root);
-  }
-
-  // ---- email-analyzer custom panel -------------------------------------------
-  function renderEmail(label) {
-    clear(app);
-    const root = el("div", { class: "kape" });
-    root.appendChild(el("h1", { text: label }));
-    root.appendChild(el("div", { class: "crumbs", text: "Forensics/Emails — custom panel" }));
-
-    const g = el("div", { class: "config-group" });
-    g.appendChild(el("h2", { text: "Analyze email" }));
-    const row = el("div", { class: "btn-row" });
-    row.appendChild(el("button", { class: "run", type: "button", text: "Select .eml file", onclick: () => callKape("pickFile") }));
-    g.appendChild(row);
-    g.appendChild(el("label", { text: "…or paste a raw email (with headers):" }));
-    const ta = el("textarea", { class: "email-input", id: "email-raw", rows: "8", placeholder: "Return-Path: ...\nReceived: ...\nFrom: ...\n\nBody with URLs…" });
-    g.appendChild(ta);
-    const row2 = el("div", { class: "btn-row" });
-    row2.appendChild(el("button", { class: "run", type: "button", text: "Analyze pasted email", onclick: () => callKape("analyzeText", { text: ta.value }) }));
-    g.appendChild(row2);
-    root.appendChild(g);
-
-    root.appendChild(el("div", { class: "output", id: "custom-output" }));
-    app.appendChild(root);
-  }
-
-  // ---- wordlists custom panel ------------------------------------------------
-  // The collection is ~330 MB, so nothing is fetched without being asked for by
-  // name. Each row is a checkbox with its download size; the footer totals the
-  // selection so the cost is visible before the click, and a per-row bar plus
-  // the host's notification progress show how far along a download is.
-  let wordlistRows = [];
-  let wordlistLabel = "Wordlists";
-
-  function wordlistSelection() {
-    return [...document.querySelectorAll(".wl-check:checked")].map((c) => c.dataset.remote);
-  }
-
-  function updateWordlistFooter() {
-    const selected = wordlistSelection();
-    const byRemote = {};
-    wordlistRows.forEach((r) => (byRemote[r.remote] = r));
-    const bytes = selected.reduce((n, r) => n + ((byRemote[r] && byRemote[r].bytes) || 0), 0);
-    const anyInstalled = selected.some((r) => byRemote[r] && byRemote[r].installed);
-    const dl = document.getElementById("wl-download");
-    const rm = document.getElementById("wl-remove");
-    const sum = document.getElementById("wl-summary");
-    if (dl) {
-      dl.disabled = selected.length === 0;
-      dl.textContent = selected.length ? "Download selected (" + humanBytes(bytes) + ")" : "Download selected";
-    }
-    if (rm) rm.disabled = !anyInstalled;
-    if (sum) {
-      sum.textContent = selected.length
-        ? selected.length + " selected · " + humanBytes(bytes) + " to download"
-        : "Nothing selected.";
-    }
-  }
-
-  function humanBytes(bytes) {
-    if (!bytes || bytes < 0) return "0 B";
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let i = 0, n = bytes;
-    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-    return (n < 10 && i > 0 ? n.toFixed(1) : Math.round(n)) + " " + units[i];
-  }
-
-  function renderWordlists(label, state) {
-    wordlistLabel = label || wordlistLabel;
-    clear(app);
-    const st = state || {};
-    wordlistRows = st.rows || [];
-
-    const root = el("div", { class: "wordlists" });
-    root.appendChild(el("h1", { text: wordlistLabel }));
-    root.appendChild(el("div", { class: "crumbs", text: "Pick the lists you need — they are downloaded one at a time into the wordlists directory." }));
-
-    const dirRow = el("div", { class: "kape-dir" });
-    dirRow.appendChild(el("span", { class: "wl-dir-label", text: "Directory:" }));
-    dirRow.appendChild(el("code", { class: "kape-dir-val", id: "wl-dir", text: st.dir || "—" }));
-    dirRow.appendChild(el("button", { class: "gate-btn", type: "button", text: "Change…", onclick: () => vscode.postMessage({ type: "openConfig" }) }));
-    dirRow.appendChild(el("button", { class: "gate-btn", type: "button", text: "Reveal", onclick: () => callCustom("openDir") }));
-    root.appendChild(dirRow);
-
-    if (st.offline) {
-      root.appendChild(el("div", { class: "wl-offline", text: "⚠ GitHub could not be reached — showing the sizes known at build time. Downloads will still be attempted." }));
-    }
-
-    // Bulk selection
-    const bulk = el("div", { class: "wl-bulk" });
-    bulk.appendChild(el("button", { class: "gate-btn", type: "button", text: "Select all", onclick: () => setAllWordlists(() => true) }));
-    bulk.appendChild(el("button", { class: "gate-btn", type: "button", text: "Select none", onclick: () => setAllWordlists(() => false) }));
-    bulk.appendChild(el("button", { class: "gate-btn", type: "button", title: "The four lists the tool forms default to", text: "Select recommended", onclick: () => setAllWordlists((r) => !!r.configKey) }));
-    bulk.appendChild(el("button", { class: "gate-btn", type: "button", text: "Select missing", onclick: () => setAllWordlists((r) => !r.installed) }));
-    root.appendChild(bulk);
-
-    const list = el("div", { class: "wl-list", id: "wl-list" });
-    wordlistRows.forEach((r) => list.appendChild(renderWordlistRow(r)));
-    root.appendChild(list);
-
-    const footer = el("div", { class: "wl-footer" });
-    footer.appendChild(el("div", { class: "wl-summary", id: "wl-summary", text: "Nothing selected." }));
-    const btns = el("div", { class: "btn-row" });
-    btns.appendChild(el("button", { class: "run", type: "button", id: "wl-download", text: "Download selected", disabled: st.busy ? "disabled" : null, onclick: () => callCustom("download", { names: wordlistSelection() }) }));
-    btns.appendChild(el("button", { class: "run-secondary", type: "button", id: "wl-remove", text: "Delete selected", onclick: () => callCustom("remove", { names: wordlistSelection() }) }));
-    footer.appendChild(btns);
-    root.appendChild(footer);
-
-    root.appendChild(el("div", { class: "output", id: "custom-output" }));
-    app.appendChild(root);
-    updateWordlistFooter();
-  }
-
-  function renderWordlistRow(r) {
-    const row = el("div", { class: "wl-row" + (r.installed ? " installed" : ""), "data-remote": r.remote });
-    const check = el("input", { type: "checkbox", class: "wl-check", id: "wl_" + r.remote, "data-remote": r.remote });
-    check.addEventListener("change", updateWordlistFooter);
-    row.appendChild(check);
-
-    const body = el("div", { class: "wl-body" });
-    const head = el("label", { class: "wl-name", for: "wl_" + r.remote }, [document.createTextNode(r.label)]);
-    if (r.configKey) head.appendChild(el("span", { class: "wl-tag", title: "Backs the " + r.configKey + " setting", text: r.configKey }));
-    head.appendChild(
-      el("span", {
-        class: "wl-state " + (r.installed ? "ok" : "missing"),
-        text: r.installed ? "downloaded" + (r.onDisk ? " · " + r.onDisk + " on disk" : "") : "not downloaded",
-      })
-    );
-    body.appendChild(head);
-    if (r.description) body.appendChild(el("div", { class: "wl-desc", text: r.description }));
-    body.appendChild(el("code", { class: "wl-file", text: r.extracted }));
-    // Per-row progress, revealed by the first progress event for this list.
-    const bar = el("div", { class: "wl-bar hidden", id: "wl-bar-" + r.remote });
-    bar.appendChild(el("div", { class: "wl-bar-fill", id: "wl-fill-" + r.remote }));
-    body.appendChild(bar);
-    body.appendChild(el("div", { class: "wl-prog hidden", id: "wl-prog-" + r.remote }));
-    row.appendChild(body);
-
-    row.appendChild(el("div", { class: "wl-size", text: r.size }));
-    return row;
-  }
-
-  function setAllWordlists(pred) {
-    const byRemote = {};
-    wordlistRows.forEach((r) => (byRemote[r.remote] = r));
-    document.querySelectorAll(".wl-check").forEach((c) => {
-      const r = byRemote[c.dataset.remote];
-      c.checked = !!r && !!pred(r);
-    });
-    updateWordlistFooter();
-  }
-
-  // One progress event for one wordlist: move its bar and describe the transfer.
-  function applyWordlistProgress(p) {
-    if (!p || !p.remote) return;
-    const bar = document.getElementById("wl-bar-" + p.remote);
-    const fill = document.getElementById("wl-fill-" + p.remote);
-    const text = document.getElementById("wl-prog-" + p.remote);
-    if (!bar || !fill || !text) return;
-    bar.classList.remove("hidden");
-    text.classList.remove("hidden");
-    const pct = p.fraction != null ? Math.round(p.fraction * 100) : null;
-    // An unknown total (no Content-Length) gets an indeterminate stripe rather
-    // than a bar frozen at zero.
-    bar.classList.toggle("indeterminate", pct === null && p.phase === "downloading");
-    fill.style.width = pct === null ? "100%" : pct + "%";
-    bar.classList.toggle("done", p.phase === "done");
-    bar.classList.toggle("failed", p.phase === "failed" || p.phase === "cancelled");
-
-    const bits = [];
-    if (p.phase === "downloading") {
-      bits.push(pct === null ? humanBytes(p.received) : pct + "%");
-      if (p.total) bits.push(humanBytes(p.received) + " / " + humanBytes(p.total));
-      if (p.rate) bits.push(humanBytes(p.rate) + "/s");
-      if (p.etaSeconds != null) bits.push("~" + formatEta(p.etaSeconds) + " left");
-    } else if (p.phase === "extracting") {
-      bits.push("extracting…");
-    } else if (p.phase === "done") {
-      bits.push("done");
-    } else {
-      bits.push(p.message || p.phase);
-    }
-    text.textContent = bits.join(" · ");
-  }
-
-  function formatEta(seconds) {
-    const s = Math.round(seconds);
-    if (s < 60) return s + "s";
-    const m = Math.floor(s / 60);
-    if (m < 60) return m + "m " + (s % 60) + "s";
-    return Math.floor(m / 60) + "h " + (m % 60) + "m";
-  }
-
   // ---- message pump ----------------------------------------------------------
   window.addEventListener("message", (event) => {
     const m = event.data;
@@ -1110,11 +812,6 @@
       }
       case "showConfig": renderConfig(m.groups, m.values, m.interfaces); break;
       case "showHistory": renderHistory(m.entries || []); break;
-      case "showCustom":
-        if (m.panel === "email") renderEmail(m.label);
-        else if (m.panel === "wordlists") renderWordlists(m.label, m.state && m.state.state);
-        else renderKape(m.label, m.state);
-        break;
       case "resolved":
         for (const id in (m.commands || {})) {
           const c = m.commands[id];
@@ -1146,32 +843,6 @@
         break;
       }
       case "gateStatus": renderGates(m); break;
-      case "customResult": {
-        // The wordlists panel drives itself from pushed state and progress
-        // events rather than the shared table/output area.
-        if (m.action === "progress") { applyWordlistProgress(m.state); break; }
-        if (m.action === "state") {
-          renderWordlists(wordlistLabel, m.state);
-          if (m.message) {
-            const out = document.getElementById("custom-output");
-            if (out) { clear(out); out.appendChild(el("div", { class: "run-status", text: m.message })); }
-          }
-          break;
-        }
-        // Directory pick updates the header; table results render in the output area.
-        if (m.dir !== undefined) {
-          const v = document.getElementById("kape-dir-val");
-          if (v) v.textContent = m.dir || "No directory selected";
-        }
-        const out = document.getElementById("custom-output");
-        if (out && (m.table || m.tables || m.message)) {
-          clear(out);
-          if (m.tables) m.tables.forEach((t) => out.appendChild(renderTable(t)));
-          else if (m.table) out.appendChild(renderTable(m.table));
-          else out.appendChild(el("div", { class: "run-status", text: m.message }));
-        }
-        break;
-      }
     }
   });
 

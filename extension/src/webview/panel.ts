@@ -6,7 +6,6 @@ import { exec, ChildProcess } from "child_process";
 import { Registry } from "../registry/registry";
 import { ConfigStore } from "../config/configStore";
 import { ExecutionEngine } from "../exec/engine";
-import { CustomPanelHost } from "../custom/types";
 import { CONFIG_GROUPS } from "../config/configMenus";
 import { resolveCommand, resolveNotes } from "../template/resolver";
 import { HistoryStore } from "../history/historyStore";
@@ -25,7 +24,6 @@ type View =
   | { kind: "home" }
   | { kind: "tool"; toolId: string }
   | { kind: "config" }
-  | { kind: "custom"; toolId: string }
   | { kind: "history" };
 
 /**
@@ -36,9 +34,6 @@ type View =
 interface Session {
   panel: vscode.WebviewPanel;
   view: View;
-  activeCustom?: CustomPanelHost;
-  /** Subscription to `activeCustom.onEvent`, torn down when the view changes. */
-  customEvents?: vscode.Disposable;
   captured?: ChildProcess;
 }
 
@@ -62,17 +57,11 @@ const HOME_CONFIG: { label: string; key: string }[] = [
 export class ToolboxPanel {
   /** Shared tab for the singleton views (home/config/history). */
   private dashboard?: Session;
-  /** One tab per tool (tool + custom panels), keyed by tool id. */
+  /** One tab per tool, keyed by tool id. */
   private toolSessions = new Map<string, Session>();
 
   /** Number of captured runs in flight across all tabs (drives the status bar). */
   private runningCount = 0;
-
-  /** Latest self-update check result, surfaced on the home dashboard's button. */
-  private updateInfo?: { available: boolean; current?: string; latest?: string; behind?: number };
-
-  /** Set only in host mode — drives the dashboard's "limited tool set" banner. */
-  private hostInfo?: { mode: string; name: string; shown: number; total: number };
 
   private runEmitter = new vscode.EventEmitter<{ running: boolean; label?: string }>();
   /** Fires when a captured run starts/finishes, so the status bar can reflect it. */
@@ -83,7 +72,6 @@ export class ToolboxPanel {
     private readonly registry: Registry,
     private readonly config: ConfigStore,
     private readonly engine: ExecutionEngine,
-    private readonly customPanels: Record<string, CustomPanelHost>,
     private readonly history: HistoryStore,
     private readonly favorites: FavoritesStore,
     private readonly outputsRoot: string
@@ -120,22 +108,6 @@ export class ToolboxPanel {
 
   private currentTheme(): string {
     return vscode.workspace.getConfiguration("virtToolbox").get<string>("theme", "adaptive");
-  }
-
-  /** Record the last update-check result and refresh any open home dashboard. */
-  setUpdateInfo(info?: { available: boolean; current?: string; latest?: string; behind?: number } | null): void {
-    this.updateInfo = info || undefined;
-    this.forEachSession((s) => {
-      if (s.view.kind === "home") this.refreshSession(s);
-    });
-  }
-
-  /** Tell the dashboard we're on a non-attack host (or clear it). */
-  setHostInfo(info?: { mode: string; name: string; shown: number; total: number }): void {
-    this.hostInfo = info;
-    this.forEachSession((s) => {
-      if (s.view.kind === "home") this.refreshSession(s);
-    });
   }
 
   private forEachSession(fn: (s: Session) => void): void {
@@ -177,8 +149,7 @@ export class ToolboxPanel {
       this.refreshSession(existing);
       return;
     }
-    const view: View = tool.customPanel ? { kind: "custom", toolId } : { kind: "tool", toolId };
-    const s = this.createSession(view, tool.label ?? tool.id);
+    const s = this.createSession({ kind: "tool", toolId }, tool.label ?? tool.id);
     this.toolSessions.set(toolId, s);
     this.refreshSession(s);
   }
@@ -206,8 +177,6 @@ export class ToolboxPanel {
     const session: Session = { panel, view };
     panel.webview.onDidReceiveMessage((m) => this.onMessage(session, m));
     panel.onDidDispose(() => {
-      session.customEvents?.dispose();
-      session.customEvents = undefined;
       // Stop this tab's captured run and forget the session.
       if (session.captured) {
         this.engine.stop(session.captured);
@@ -216,7 +185,7 @@ export class ToolboxPanel {
       }
       if (this.dashboard === session) {
         this.dashboard = undefined;
-      } else if (session.view.kind === "tool" || session.view.kind === "custom") {
+      } else if (session.view.kind === "tool") {
         this.toolSessions.delete(session.view.toolId);
       }
     });
@@ -260,20 +229,6 @@ export class ToolboxPanel {
     }
     const tool = this.registry.get(view.toolId);
     if (!tool) {
-      return;
-    }
-    if (view.kind === "custom") {
-      const host = tool.customPanel ? this.customPanels[tool.customPanel] : undefined;
-      session.activeCustom = host;
-      // A panel that pushes results on its own (download progress) gets its
-      // events forwarded to this tab for as long as the tab shows it.
-      session.customEvents?.dispose();
-      session.customEvents = host?.onEvent?.((result) => this.post(session, { type: "customResult", ...result }));
-      if (host) {
-        void Promise.resolve(host.initial()).then((state) =>
-          this.post(session, { type: "showCustom", panel: tool.customPanel, label: tool.label ?? tool.id, state })
-        );
-      }
       return;
     }
     this.post(session, {
@@ -327,12 +282,10 @@ export class ToolboxPanel {
       config,
       quickTools,
       recent: this.history.all().slice(0, 6),
-      update: this.updateInfo,
-      host: this.hostInfo,
     };
   }
 
-  /** Check every gate (deps on PATH, venv dir present, service active, group membership). */
+  /** Check every gate (deps on PATH, service active, group membership). */
   private async checkGates(session: Session, tool: Tool): Promise<void> {
     const run = (cmd: string) =>
       new Promise<boolean>((resolve) =>
@@ -347,12 +300,6 @@ export class ToolboxPanel {
       (tool.verify ?? []).map(async (v) => ({ label: v.label, ok: await run(v.command), hint: v.hint }))
     );
 
-    let venv: { name: string; present: boolean } | undefined;
-    if (tool.venv) {
-      const dir = path.join(this.outputsRoot, tool.outputDir ?? tool.id, tool.venv);
-      venv = { name: tool.venv, present: fs.existsSync(dir) };
-    }
-
     let service: { name: string; active: boolean } | undefined;
     if (tool.service) {
       service = { name: tool.service, active: await run(`systemctl is-active --quiet ${tool.service}`) };
@@ -363,7 +310,7 @@ export class ToolboxPanel {
       group = { name: tool.group, member: await run(`id -nG | tr ' ' '\\n' | grep -qx ${tool.group}`) };
     }
 
-    this.post(session, { type: "gateStatus", toolId: tool.id, deps, verify, venv, service, group });
+    this.post(session, { type: "gateStatus", toolId: tool.id, deps, verify, service, group });
   }
 
   // ---- message handling ------------------------------------------------------
@@ -426,20 +373,11 @@ export class ToolboxPanel {
           `add group ${m.group}`
         );
         break;
-      case "customAction":
-        void this.handleCustomAction(session, m.action, m.payload);
-        break;
       case "toggleFavorite":
         if (m.toolId) void this.favorites.toggle(m.toolId);
         break;
       case "findInCategory":
         void vscode.commands.executeCommand("virtToolbox.findTool", m.category);
-        break;
-      case "update":
-        void vscode.commands.executeCommand("virtToolbox.update");
-        break;
-      case "showAllTools":
-        void vscode.commands.executeCommand("virtToolbox.showAllTools");
         break;
     }
   }
@@ -560,13 +498,6 @@ export class ToolboxPanel {
     if (picked && picked.length > 0) {
       this.post(session, { type: "fieldValue", fieldId, value: picked[0].fsPath });
     }
-  }
-
-  /** Generic custom-panel RPC: dispatch the action to the active panel module, post the result. */
-  private async handleCustomAction(session: Session, action: string, payload: any): Promise<void> {
-    if (!session.activeCustom) return;
-    const result = await session.activeCustom.handle(action, payload);
-    this.post(session, { type: "customResult", ...result });
   }
 
   dispose(): void {

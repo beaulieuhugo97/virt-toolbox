@@ -74,7 +74,7 @@ export class ToolTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         node.tool.label ?? node.tool.id,
         vscode.TreeItemCollapsibleState.None
       );
-      item.iconPath = new vscode.ThemeIcon(node.tool.customPanel ? "beaker" : "tools");
+      item.iconPath = new vscode.ThemeIcon("tools");
       if (fav) item.description = "★";
       item.command = {
         command: "virtToolbox.openTool",

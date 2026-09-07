@@ -32,15 +32,15 @@ send({
   isFavorite: false,
   interfaces: [{ name: "eth0", address: "10.0.0.5" }],
   tool: {
-    id: "gobuster", label: "gobuster", category: "Web_App", deps: ["gobuster"], hasNotes: false,
+    id: "virt-images", label: "Images & VM creation", category: "Virtual_Machines", deps: ["virt-install"], hasNotes: false,
     fields: [
-      { id: "target", type: "text", label: "Target host", default: "box.htb", required: true },
+      { id: "target", type: "text", label: "VM name", default: "pwnbox", required: true },
       { id: "port", type: "port", label: "Port (optional)" },
-      { id: "wordlist", type: "file", label: "Directory wordlist", default: "/home/u/.pentest-toolbox/wordlists/discovery-wordlist.txt", rootConfig: "WORDLISTS_DIR" },
-      { id: "threads", type: "text", label: "Threads", default: "64" },
+      { id: "wordlist", type: "file", label: "Installer ISO", default: "/var/lib/libvirt/images/parrot.iso", rootConfig: "IMAGES_DIR" },
+      { id: "threads", type: "text", label: "vCPUs", default: "8" },
       { id: "timeout", type: "text", label: "Timeout (optional, -to)" },
     ],
-    actions: [{ id: "dir", label: "Directory brute-force", mode: "captured" }],
+    actions: [{ id: "dir", label: "Create VM from ISO", mode: "captured" }],
   },
 });
 
@@ -72,71 +72,20 @@ eq("only the offending field is flagged", $$(".field-warn").length, 1);
 send({ type: "resolved", commands: { dir: { command: "x" } }, notes: [], fileWarnings: [] });
 eq("the warning clears once the file is there", $$(".field-warn").length, 0);
 
-// ── wordlists panel ───────────────────────────────────────────────────────────
-const rows = [
-  { remote: "rockyou.txt.tar.gz", label: "rockyou", description: "Default password list.", size: "51 MB", bytes: 53287424, extracted: "rockyou.txt", installed: false, configKey: "PASS_WORDLIST_FILE" },
-  { remote: "discovery-wordlist.tar.gz", label: "Directory discovery", description: "Paths for gobuster.", size: "16 MB", bytes: 17272917, extracted: "discovery-wordlist.txt", installed: true, onDisk: "180 MB", configKey: "DIR_WORDLIST" },
-  { remote: "lfi-wordlist.tar.gz", label: "LFI paths", description: "Traversal payloads.", size: "25 KB", bytes: 25603, extracted: "lfi-wordlist.txt", installed: false },
-];
-const panelState = (over: Record<string, unknown> = {}) => ({
-  dir: "/home/u/.pentest-toolbox/wordlists", rows, offline: false, busy: false, ...over,
+// ── home dashboard ────────────────────────────────────────────────────────────
+send({
+  type: "showHome",
+  stats: { toolCount: 4, categoryCount: 3, runCount: 7 },
+  categories: [{ name: "Virtual_Machines", count: 2 }],
+  config: [{ label: "Connection URI (LIBVIRT_URI)", value: "qemu:///system" }],
+  quickTools: [{ id: "virsh", label: "virsh — manage VMs" }],
+  recent: [],
 });
-send({ type: "showCustom", panel: "wordlists", label: "Wordlists", state: { action: "state", state: panelState() } });
+eq("the dashboard counts tools, categories and runs", $$(".stat-n").map((e) => e.textContent).join(","), "4,3,7");
+ok("the config card shows the resolved libvirt URI", appText().includes("qemu:///system"));
+click($$(".home-link").find((b) => b.textContent!.includes("Configuration")));
+ok("the Configuration link opens the config view", posted.some((m) => m.type === "openConfig"));
 
-eq("every wordlist is listed", $$(".wl-row").length, 3);
-eq("the target directory is shown", byId("wl-dir")?.textContent, "/home/u/.pentest-toolbox/wordlists");
-eq("each row shows its download size", $$(".wl-size").map((e) => e.textContent).join(","), "51 MB,16 MB,25 KB");
-ok("an already-downloaded list is marked", $('.wl-row[data-remote="discovery-wordlist.tar.gz"]')!.className.includes("installed"));
-ok("…and shows what it takes on disk", $('.wl-row[data-remote="discovery-wordlist.tar.gz"]')!.textContent!.includes("180 MB"));
-eq("lists backing a config key are tagged", $$(".wl-tag").map((e) => e.textContent).sort().join(","), "DIR_WORDLIST,PASS_WORDLIST_FILE");
-eq("nothing is selected to begin with", byId("wl-summary")?.textContent, "Nothing selected.");
-eq("downloading is disabled with an empty selection", (byId("wl-download") as HTMLButtonElement).disabled, true);
-
-const bulk = (name: string) => $$(".wl-bulk button").find((b) => b.textContent === name);
-click(bulk("Select all"));
-eq("select all checks every row", $$(".wl-check:checked").length, 3);
-// The whole point of the panel: the cost is visible before the click.
-eq("the footer totals the selection", byId("wl-summary")?.textContent, "3 selected · 67 MB to download");
-eq("the button repeats the total", byId("wl-download")?.textContent, "Download selected (67 MB)");
-
-click(bulk("Select recommended"));
-eq("recommended picks the config-backed lists", $$(".wl-check:checked").map((c) => (c as HTMLElement).dataset.remote).sort().join(","), "discovery-wordlist.tar.gz,rockyou.txt.tar.gz");
-click(bulk("Select missing"));
-eq("missing picks what is not on disk", $$(".wl-check:checked").map((c) => (c as HTMLElement).dataset.remote).sort().join(","), "lfi-wordlist.tar.gz,rockyou.txt.tar.gz");
-
-click(byId("wl-download"));
-eq("download asks the host for exactly the selection", lastPosted("customAction", "download")?.payload.names.sort().join(","), "lfi-wordlist.tar.gz,rockyou.txt.tar.gz");
-
-// ── download progress ─────────────────────────────────────────────────────────
-const progress = (state: Record<string, unknown>) => send({ type: "customResult", action: "progress", state });
-progress({ remote: "rockyou.txt.tar.gz", received: 26643712, total: 53287424, fraction: 0.5, rate: 3145728, etaSeconds: 8.5, phase: "downloading" });
-const bar = byId("wl-bar-rockyou.txt.tar.gz")!;
-const prog = byId("wl-prog-rockyou.txt.tar.gz")!;
-ok("the progress bar appears on the first event", !bar.className.includes("hidden"));
-eq("the bar fills to the fraction", (byId("wl-fill-rockyou.txt.tar.gz") as HTMLElement).style.width, "50%");
-eq("progress reads percent, bytes, rate and ETA", prog.textContent, "50% · 25 MB / 51 MB · 3.0 MB/s · ~9s left");
-
-progress({ remote: "rockyou.txt.tar.gz", received: 0, phase: "downloading" });
-ok("no Content-Length sweeps instead of freezing at 0%", bar.className.includes("indeterminate"));
-progress({ remote: "rockyou.txt.tar.gz", received: 1, phase: "extracting" });
-ok("extraction is reported and stops the sweep", prog.textContent === "extracting…" && !bar.className.includes("indeterminate"));
-progress({ remote: "rockyou.txt.tar.gz", received: 1, fraction: 1, phase: "failed", message: "connection timed out" });
-ok("a failure shows on the bar with its reason", bar.className.includes("failed") && prog.textContent === "connection timed out");
-
-send({ type: "customResult", action: "state", state: panelState({ rows: rows.map((r) => ({ ...r, installed: true })) }), message: "Downloaded 2 wordlists." });
-eq("the list re-renders when the run finishes", $$(".wl-row.installed").length, 3);
-ok("the outcome is reported", !!byId("custom-output")?.textContent?.includes("Downloaded 2 wordlists."));
-
-// ── host-mode banner ──────────────────────────────────────────────────────────
-const home = (over: Record<string, unknown> = {}) =>
-  send({ type: "showHome", stats: { toolCount: 22, categoryCount: 6, runCount: 0 }, categories: [], config: [], quickTools: [], recent: [], ...over });
-home({ host: { mode: "host", name: "Fedora Linux 44", shown: 22, total: 92 } });
-ok("host mode banners the dashboard", !!$(".host-banner"));
-ok("the banner names the distro and what is hidden", $(".host-banner")!.textContent!.includes("Fedora Linux 44") && $(".host-banner")!.textContent!.includes("22 of 92"));
-click($(".host-banner button"));
-ok("the banner offers to show everything", posted.some((m) => m.type === "showAllTools"));
-home();
-ok("no banner on an attack box", !$(".host-banner"));
 
 // ── the views these changes touch in passing ──────────────────────────────────
 send({
@@ -153,7 +102,5 @@ eq("config marks required keys as required", $$(".field > label .req").length, 2
 eq("config marks optional keys", $$(".field > label .opt").length, 1);
 send({ type: "showHistory", entries: [] });
 ok("run history still renders", appText().includes("Run History"));
-send({ type: "showCustom", panel: "email", label: "Email Analyzer" });
-ok("the email panel still renders", appText().includes("Analyze email"));
 
 done();

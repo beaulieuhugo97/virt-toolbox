@@ -35,9 +35,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const engine = new ExecutionEngine();
   const favorites = new FavoritesStore(context.globalState);
   const history = new HistoryStore(context.workspaceState);
-  // No bespoke customPanels in the virtualization toolbox — every tool renders
   // through the generic form engine.
-  const panel = new ToolboxPanel(context, registry, config, engine, {}, history, favorites, outputsRoot);
+  const panel = new ToolboxPanel(context, registry, config, engine, history, favorites, outputsRoot);
 
   const tree = new ToolTreeProvider(registry, favorites);
   // createTreeView (vs registerTreeDataProvider) so `showCollapseAll` adds the

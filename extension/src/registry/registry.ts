@@ -89,7 +89,6 @@ export class Registry {
       sections: tool.sections,
       notesTitle: tool.notesTitle,
       hasNotes: !!(tool.notes && tool.notes.length > 0),
-      customPanel: tool.customPanel,
     };
   }
 }

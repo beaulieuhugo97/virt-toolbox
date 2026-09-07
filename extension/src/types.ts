@@ -70,9 +70,9 @@ export interface Action {
   mode: ExecMode;
   /** Tab this action belongs to; omit to show on every tab. */
   section?: string;
-  /** Command template, e.g. "nmap {mode} {scanType} -oN {out} {target}". */
+  /** Command template, e.g. "sudo virsh --connect {LIBVIRT_URI} start {vmName}". */
   command: string;
-  /** Output filename template, expanded under the tool's outputDir (e.g. "{timestamp}_{target}_nmap.txt"). */
+  /** Output filename template, expanded under the tool's outputDir (e.g. "{timestamp}_{vmName}_virsh.txt"). */
   output?: string;
   /** Parser id — turns captured stdout into a rendered table. */
   parse?: string;
@@ -83,10 +83,10 @@ export interface Action {
 }
 
 /**
- * A step in the "on the target, run this" instructions (the Upload/serve family,
- * webserver, evil-winrm post-exploitation). `command` is a template resolved
- * host-side against config + field state; `when` gates it (e.g. Windows vs Linux).
- * These reproduce the bash `upload_and_execute_*` echo blocks.
+ * A step in the "before this will work, run this" instructions rendered below a
+ * tool's actions — docker's "start the service / join the group", say. `command`
+ * is a template resolved host-side against config + field state; `when` gates it.
+ * Notes are shown, never executed.
  */
 export interface NoteStep {
   label: string;
@@ -121,8 +121,6 @@ export interface Tool {
   actions?: Action[];
   /** Tabs — a cleaner alternative to a wide `mode` segment for many-operation tools. */
   sections?: Section[];
-  /** Python venv directory (e.g. "certipy-venv"); its presence is checked and badged. */
-  venv?: string;
   /** systemd service that must be running (check_service) — badged, with a Start affordance. */
   service?: string;
   /** OS group the user must belong to (check_group) — badged, with an Add affordance. */
@@ -130,8 +128,6 @@ export interface Tool {
   /** Instruction steps rendered below the actions (target-side commands). */
   notes?: NoteStep[];
   notesTitle?: string;
-  /** Escape hatch — id of a bespoke webview panel for tools the schema can't express. */
-  customPanel?: string;
 }
 
 // ---- Serialized view of a Tool sent to the webview ---------------------------
@@ -166,15 +162,13 @@ export interface SerializedTool {
   sections?: Section[];
   notesTitle?: string;
   hasNotes: boolean;
-  customPanel?: string;
 }
 
-/** Gate statuses shown as badges (deps, venv presence, service, group membership). */
+/** Gate statuses shown as badges (deps, service, group membership). */
 export interface GateStatus {
   toolId: string;
   deps: { name: string; ok: boolean }[];
   verify?: { label: string; ok: boolean; hint?: string }[];
-  venv?: { name: string; present: boolean };
   service?: { name: string; active: boolean };
   group?: { name: string; member: boolean };
 }
