@@ -5,9 +5,6 @@ forms — manage `virsh` VMs, create them with `virt-install`, snapshot them, wi
 libvirt networks, and spin throwaway containers. Pick a tool, fill in the fields,
 review the exact command it will run, and launch it.
 
-Spun out of [pentest-toolbox](https://github.com/beaulieuhugo97/pentest-toolbox);
-it reuses that project's data-driven form engine.
-
 ## ℹ️ Status
 
 > [!WARNING]  

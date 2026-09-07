@@ -111,9 +111,9 @@ banner() {
 }
 
 # ── system detection ─────────────────────────────────────────────────────────
-# Unlike the pentest toolbox this has no tested/untested distro split: libvirt,
-# virt-install and docker exist everywhere. All detection has to settle is which
-# package manager to use and what the virtualization packages are called.
+# There is no tested/untested distro split to make here: libvirt, virt-install
+# and docker exist everywhere. All detection has to settle is which package
+# manager to use and what the virtualization packages are called.
 detect_os() {
     step "Checking your system"
 

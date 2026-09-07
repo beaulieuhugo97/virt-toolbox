@@ -2,7 +2,7 @@
 
 ## 1.0.0
 
-Initial release. Spun out of pentest-toolbox as a standalone extension.
+Initial release.
 
 - **virsh** — VM lifecycle (list, start, stop, suspend, resume, reboot, force-reset,
   destroy, delete) and snapshots (list, create, revert, delete).
