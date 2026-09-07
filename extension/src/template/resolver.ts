@@ -7,7 +7,7 @@ export interface ResolveResult {
   command: string;
   /** Absolute path of the output file, if the action declares one. */
   outputFile?: string;
-  /** cwd the command runs in (scripts/outputs/<outputDir>), created before run. */
+  /** cwd the command runs in (<outputsPath>/<outputDir>), created before run. */
   cwd: string;
 }
 
@@ -126,8 +126,21 @@ function fieldToken(field: Field, state: Record<string, string>, visible: Set<st
  * auth flags) without per-tool code. Unknown tokens → "".
  */
 function interpolate(template: string, tokens: Record<string, string>): string {
-  const sub = (s: string) =>
+  // Substitution repeats to a fixpoint: a field's value may itself contain a
+  // token (cDiskPath defaults to "{IMAGES_DIR}/{cVmName}.qcow2"), so one pass
+  // would leave "{cVmName}" sitting in the command. Bounded so a token that
+  // refers to itself terminates instead of spinning.
+  const subOnce = (s: string) =>
     s.replace(/\{(\w+)\}/g, (_m, name: string) => (tokens[name] !== undefined ? tokens[name] : ""));
+  const sub = (s: string) => {
+    let out = s;
+    for (let pass = 0; pass < 5 && /\{\w+\}/.test(out); pass++) {
+      const next = subOnce(out);
+      if (next === out) break;
+      out = next;
+    }
+    return out;
+  };
 
   const withGroups = template.replace(/\[\[([\s\S]*?)\]\]/g, (_m, inner: string) => {
     const names = [...inner.matchAll(/\{(\w+)\}/g)].map((x) => x[1]);

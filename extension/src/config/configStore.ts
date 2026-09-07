@@ -7,7 +7,7 @@ const STATE_PREFIX = "virtToolbox.config.";
 /**
  * The single source of truth for injected config values (the libvirt URI, images
  * directory and default network). Persisted to VS Code workspace state (GUI-only;
- * the bash TUI under scripts/ keeps its own config.env).
+ * not synced to any file on disk).
  */
 export class ConfigStore {
   private emitter = new vscode.EventEmitter<void>();

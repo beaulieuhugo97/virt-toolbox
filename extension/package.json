@@ -189,6 +189,11 @@
           "type": "boolean",
           "default": true,
           "description": "Open the Virtualization Toolbox dashboard automatically the first time the Tools view is revealed."
+        },
+        "virtToolbox.outputsPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Directory that tool runs execute in; each tool gets a `<tool>/` subfolder and any `{out}` file is written there. Leave empty for `~/.virt-toolbox/outputs`. A leading `~` is expanded."
         }
       }
     },

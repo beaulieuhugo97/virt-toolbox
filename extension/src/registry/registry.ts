@@ -25,7 +25,12 @@ function resolveDefault(def: string | undefined, config: ConfigStore): string | 
     return undefined;
   }
   const all = config.getAll();
-  return def.replace(/\{(\w+)\}/g, (_m, name: string) => all[name] ?? "");
+  // Config tokens resolve to concrete values here so the form shows real paths.
+  // A token that is NOT a config key is left standing: it names another *field*
+  // (cDiskPath's "{IMAGES_DIR}/{cVmName}.qcow2"), which only has a value once the
+  // form is filled in, so it is resolved at command time instead. Dropping it
+  // here is what silently produced "…/images/.qcow2" for every VM.
+  return def.replace(/\{(\w+)\}/g, (m, name: string) => all[name] ?? m);
 }
 
 export class Registry {

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { Registry } from "./registry/registry";
 import { ConfigStore } from "./config/configStore";
@@ -12,23 +12,27 @@ import { ToolboxPanel } from "./webview/panel";
 const WALKTHROUGH_SHOWN_KEY = "virtToolbox.walkthroughShown";
 
 /**
- * Locate the toolbox root — the folder containing `scripts/` — so runs land in
- * scripts/outputs/<tool>/ (the setup_directory convention). Prefer an open
- * workspace folder that contains scripts/; otherwise fall back to the folder
- * above the extension (the /extension subfolder layout).
+ * Where runs land — each tool's commands execute in `<outputsRoot>/<tool>/`, and
+ * a `{out}` file is written there.
+ *
+ * This used to hunt for a folder containing `scripts/Tools/` and fall back to the
+ * directory above the extension. That tied the working directory to a checkout
+ * layout, and when the probe missed, runs executed inside VS Code's extensions
+ * directory — which matters, because a command can use $PWD (docker mounts it).
+ * It is now a fixed, documented location, overridable for anyone who wants runs
+ * beside a project.
  */
-function findToolboxRoot(context: vscode.ExtensionContext): string {
-  for (const folder of vscode.workspace.workspaceFolders ?? []) {
-    if (fs.existsSync(path.join(folder.uri.fsPath, "scripts", "Tools"))) {
-      return folder.uri.fsPath;
-    }
-  }
-  return path.dirname(context.extensionUri.fsPath);
+function resolveOutputsRoot(): string {
+  const configured = vscode.workspace
+    .getConfiguration("virtToolbox")
+    .get<string>("outputsPath", "")
+    .trim();
+  const raw = configured || path.join(os.homedir(), ".virt-toolbox", "outputs");
+  return raw === "~" || raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(1)) : raw;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  const toolboxRoot = findToolboxRoot(context);
-  const outputsRoot = path.join(toolboxRoot, "scripts", "outputs");
+  const outputsRoot = resolveOutputsRoot();
 
   const registry = new Registry();
   const config = new ConfigStore(context.workspaceState);

@@ -95,7 +95,9 @@ cd ~/.virt-toolbox && git pull && cd extension && npm install && npm run package
    in an integrated terminal where the `sudo` prompt works. Every run is saved to
    **Run History** (the history icon in the Tools title bar).
 
-Runs land in `scripts/outputs/<tool>/`.
+Each run executes in `~/.virt-toolbox/outputs/<tool>/`, and any output file lands
+there. Point **`virtToolbox.outputsPath`** somewhere else to keep runs beside a
+project instead.
 
 > [!TIP]
 > The panel adapts to your VS Code color theme by default. Prefer the bold Hack
@@ -114,13 +116,6 @@ Runs land in `scripts/outputs/<tool>/`.
 > | `DEFAULT_NET` | `virbr0` | the bridge new VMs are attached to |
 >
 > They persist to VS Code workspace state.
-
-## 📁 Layout
-
-- **`extension/`** — the VS Code extension (see [extension/README.md](extension/README.md)).
-- **`scripts/`** — the original bash TUI the tools were ported from (the reference).
-  The extension never runs these, but it does anchor on `scripts/Tools/` to locate
-  the checkout, and every run's working directory is `scripts/outputs/<tool>/`.
 
 ## 📄 License
 

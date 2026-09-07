@@ -422,7 +422,7 @@ ${C_BOLD}CONFIGURATION${C_RESET}
     Those values inject into every tool's command.
 
 ${C_BOLD}OUTPUT${C_RESET}
-    Runs land in $INSTALL_DIR/scripts/outputs/.
+    Runs land in ~/.virt-toolbox/outputs/ (virtToolbox.outputsPath to change it).
 
 ${C_BOLD}UPDATE${C_RESET}
     cd "$INSTALL_DIR" && git pull && cd extension \\

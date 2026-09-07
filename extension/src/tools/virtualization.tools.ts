@@ -1,7 +1,7 @@
 import { Tool } from "../types";
 
-// The virtualization domain, ported from the libvirt/virsh TUI script
-// (scripts/Tools/Virtualization/). Four tools grouped by the tree:
+// The virtualization domain, ported from the libvirt/virsh bash TUI this
+// project grew out of. Four tools grouped by the tree:
 //
 //   Virtualization/Virtual_Machines → virsh        (VM lifecycle + snapshots)
 //   Virtualization/Virtual_Machines → virt-images  (download / create / import)
@@ -62,15 +62,47 @@ export const tools: Tool[] = [
       { id: "import", label: "Import disk" },
     ],
     fields: [
-      // Download
+      // Download. The TUI offered these as a menu; the same list is a select here,
+      // with "Custom URL…" (value "") revealing the free-text field. A hidden field
+      // resolves to "", so `{dlPreset}{dlUrl}` is whichever of the two is in play.
+      {
+        id: "dlPreset",
+        type: "select",
+        label: "Image",
+        section: "download",
+        options: {
+          "Parrot Security (ISO)": "https://deb.parrot.sh/parrot/iso/6.4/Parrot-security-6.4_amd64.iso",
+          "Parrot HTB (ISO)": "https://deb.parrot.sh/parrot/iso/6.4/Parrot-htb-6.4_amd64.iso",
+          "Kali Linux (ISO)": "https://cdimage.kali.org/kali-2025.3/kali-linux-2025.3-installer-amd64.iso",
+          "Kali Linux (qcow2, 7z)": "https://mirror.quantum5.ca/kali-images/kali-2025.2/kali-linux-2025.2-qemu-amd64.7z",
+          "VirtIO drivers for Windows (ISO)": "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso",
+          "Custom URL…": "",
+        },
+        default: "https://deb.parrot.sh/parrot/iso/6.4/Parrot-security-6.4_amd64.iso",
+        help: "Downloaded into the configured images directory. A .7z/.zip/.tar archive is extracted there and the archive removed.",
+      },
       {
         id: "dlUrl",
         type: "text",
-        label: "Image URL",
+        label: "Custom image URL",
         section: "download",
-        default: "https://deb.parrot.sh/parrot/iso/6.4/Parrot-security-6.4_amd64.iso",
-        help:
-          "Downloaded into the configured images directory and, if it is a .7z/.zip/.tar archive, extracted there. Presets — Parrot HTB: https://deb.parrot.sh/parrot/iso/6.4/Parrot-htb-6.4_amd64.iso · Kali ISO: https://cdimage.kali.org/kali-2025.3/kali-linux-2025.3-installer-amd64.iso · Kali qcow2: https://mirror.quantum5.ca/kali-images/kali-2025.2/kali-linux-2025.2-qemu-amd64.7z",
+        when: { field: "dlPreset", equals: "" },
+        placeholder: "https://example.com/image.iso",
+        help: "Any .iso or .qcow2, or a .7z/.zip/.tar archive containing one.",
+      },
+      {
+        // The TUI prompted "delete and redownload / use existing / cancel" when the
+        // file was already there; these are the same three outcomes as wget flags.
+        id: "dlIfPresent",
+        type: "select",
+        label: "If it is already downloaded",
+        section: "download",
+        options: {
+          "Download only if newer": "-N",
+          "Keep the existing file": "-nc",
+          "Delete and re-download": '-O "$(basename {dlPreset}{dlUrl})"',
+        },
+        default: "-N",
       },
       // Create from ISO
       { id: "cVmName", type: "text", label: "VM name", section: "create", default: "pwnbox" },
@@ -106,7 +138,7 @@ export const tools: Tool[] = [
         sudo: true,
         section: "download",
         command:
-          "cd {IMAGES_DIR} && sudo wget -N {dlUrl} && f=$(basename {dlUrl}) && case \"$f\" in *.7z) sudo 7z x -y \"$f\" ;; *.zip) sudo unzip -o \"$f\" ;; *.tar.*) sudo tar xf \"$f\" ;; esac ; sudo chmod 644 {IMAGES_DIR}/*.qcow2 {IMAGES_DIR}/*.iso 2>/dev/null ; ls -lh {IMAGES_DIR}",
+          "cd {IMAGES_DIR} && sudo wget {dlIfPresent} {dlPreset}{dlUrl} && f=$(basename {dlPreset}{dlUrl}) && case \"$f\" in *.7z) sudo 7z x -y \"$f\" && sudo rm -f \"$f\" ;; *.zip) sudo unzip -o \"$f\" && sudo rm -f \"$f\" ;; *.tar.*) sudo tar xf \"$f\" && sudo rm -f \"$f\" ;; esac ; sudo chmod 644 {IMAGES_DIR}/*.qcow2 {IMAGES_DIR}/*.iso 2>/dev/null ; ls -lh {IMAGES_DIR}",
       },
       {
         id: "create",
@@ -125,6 +157,30 @@ export const tools: Tool[] = [
         section: "import",
         command:
           "sudo virt-install --connect {LIBVIRT_URI} --os-variant {iOsVariant} --name {iVmName} --ram {iRam} --vcpus {iVcpus} --cpu host --disk path={iDisk},bus=virtio,cache=writeback --network bridge={iNet},model=virtio --graphics spice,listen=0.0.0.0 --video qxl --channel spicevmc,target_type=virtio,name=com.redhat.spice.0 --console pty,target_type=serial --import",
+      },
+    ],
+    // Windows has no public direct ISO link, so it cannot be a download preset —
+    // the TUI carried these as an instruction screen and they stay instructions.
+    notesTitle: "Windows guests",
+    notes: [
+      {
+        label: "Windows 11 has no direct download URL — get the ISO from https://www.microsoft.com/software-download/windows11, then move it into the images directory",
+        when: { field: "cOsVariant", in: ["win11", "win10"] },
+        command: "sudo mv ~/Downloads/Win*.iso {IMAGES_DIR}/",
+      },
+      {
+        label: "VirtIO disk/network drivers — pick \"VirtIO drivers for Windows\" on the Download tab, or fetch it straight into the images directory",
+        when: { field: "cOsVariant", in: ["win11", "win10"] },
+        command: "sudo wget -N -P {IMAGES_DIR} https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso",
+      },
+      {
+        label: "SPICE guest tools on the host, for a usable display and shared clipboard",
+        when: { field: "cOsVariant", in: ["win11", "win10"] },
+        command: "sudo dnf install spice-gtk-tools",
+      },
+      {
+        label: "MS Build Tools, installed inside the guest, for compiling Windows projects — VS 2015 https://aka.ms/vs/14/release/vs_buildtools.exe · 2017 https://aka.ms/vs/15/release/vs_buildtools.exe · 2019 https://aka.ms/vs/16/release/vs_buildtools.exe · 2022 https://aka.ms/vs/17/release/vs_buildtools.exe",
+        when: { field: "cOsVariant", in: ["win11", "win10"] },
       },
     ],
   },
@@ -212,6 +268,12 @@ export const tools: Tool[] = [
     notes: [
       { label: "The docker service must be running", command: "sudo systemctl start docker" },
       { label: "Your user must be in the docker group (use the Add-me badge above, then re-login)" },
+      {
+        // The TUI warned about this before running; kali-rolling is a bare base image.
+        label: "kalilinux/kali-rolling ships with no tools — install them inside the container (or kali-linux-large for the full set)",
+        when: { field: "image", equals: "kalilinux/kali-rolling" },
+        command: "apt update && apt -y install kali-linux-headless",
+      },
     ],
   },
 ];

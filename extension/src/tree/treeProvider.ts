@@ -6,7 +6,7 @@ import { categoryIcon } from "./categoryIcons";
 
 // A tree node is either a category (folder) or a tool (leaf). Categories are
 // derived from each tool's slash-delimited `category`, so the tree mirrors the
-// filesystem menu the TUI builds from scripts/Tools/.
+// filesystem menu the original bash TUI built from its Tools/ directory.
 interface CategoryNode {
   kind: "category";
   label: string;

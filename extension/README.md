@@ -41,6 +41,3 @@ npm run package     # vsce → virt-toolbox.vsix
 Open the **repo root** (not `extension/`) in VS Code and press **F5** to launch an
 Extension Development Host — the launch config in `.vscode/` builds first, then
 points the host at `extension/`.
-
-The original bash TUI these tools were ported from lives in
-`scripts/Tools/Virtualization/` and remains the reference.

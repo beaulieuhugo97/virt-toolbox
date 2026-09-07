@@ -115,7 +115,7 @@ export interface Tool {
   deps?: string[];
   /** Variant/version probes (e.g. john is jumbo) — badged next to deps. */
   verify?: Verify[];
-  /** Runs land in scripts/outputs/<outputDir>/ (the setup_directory convention). */
+  /** Runs execute in <outputsPath>/<outputDir>/; a {out} file is written there. */
   outputDir?: string;
   fields?: Field[];
   actions?: Action[];

@@ -34,7 +34,7 @@ body[data-theme="adaptive"] {
   --tb-accent-border: var(--vscode-focusBorder, var(--tb-primary));
 }
 
-/* Bold Hack The Box palette (carried from scripts/env/styles.env). */
+/* Bold Hack The Box palette (carried from the original TUI's styles.env). */
 body[data-theme="htb"] {
   --tb-text: #c5d1eb;
   --tb-text-dim: #a4b1cd;
