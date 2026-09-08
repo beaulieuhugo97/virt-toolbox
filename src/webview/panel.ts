@@ -42,20 +42,22 @@ interface Session {
 // these at build time.
 // Interleaved on purpose: favorites and recents are prepended and the whole list
 // is sliced to 10, so alternating the two domains keeps a 10-slice from hiding
-// one of them entirely. The tree lists all twelve regardless.
+// one of them entirely. The tree lists all fourteen regardless.
 const QUICK_TOOL_IDS = [
   "virsh",
   "docker",
-  "virsh-snapshots",
+  "virt-create",
   "docker-compose",
-  "virsh-pools",
+  "virsh-snapshots",
   "docker-images",
   "virt-net",
   "docker-networks",
   "virt-images",
   "virsh-devices",
-  "virsh-host",
+  "virsh-pools",
   "docker-volumes",
+  "virsh-volumes",
+  "virsh-host",
 ];
 
 // The config keys surfaced on the dashboard's card (label → key).

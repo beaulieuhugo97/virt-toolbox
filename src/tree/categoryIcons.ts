@@ -4,9 +4,6 @@
 const ICONS: Record<string, string> = {
   Virtual_Machines: "vm",
   Container: "package",
-  Networking: "radio-tower",
-  Images: "device-desktop",
-  Storage: "database",
   Host: "server",
 };
 

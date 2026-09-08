@@ -32,7 +32,7 @@ send({
   isFavorite: false,
   interfaces: [{ name: "eth0", address: "10.0.0.5" }],
   tool: {
-    id: "virt-images", label: "Images & VM creation", category: "Virtual_Machines", deps: ["virt-install"], hasNotes: false,
+    id: "virt-create", label: "Create", category: "Virtual_Machines", deps: ["virt-install"], hasNotes: false,
     fields: [
       { id: "target", type: "text", label: "VM name", default: "pwnbox", required: true },
       { id: "port", type: "port", label: "Port (optional)" },
@@ -78,7 +78,7 @@ send({
   stats: { toolCount: 4, categoryCount: 3, runCount: 7 },
   categories: [{ name: "Virtual_Machines", count: 2 }],
   config: [{ label: "Connection URI (LIBVIRT_URI)", value: "qemu:///system" }],
-  quickTools: [{ id: "virsh", label: "virsh — manage VMs" }],
+  quickTools: [{ id: "virsh", label: "Manage" }],
   recent: [],
 });
 eq("the dashboard counts tools, categories and runs", $$(".stat-n").map((e) => e.textContent).join(","), "4,3,7");

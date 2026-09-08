@@ -1,12 +1,14 @@
 // The libvirt domain, ported from the libvirt/virsh bash TUI this project grew
-// out of. Seven tools grouped by the tree:
+// out of. Nine tools grouped by the tree:
 //
 //   Virtual_Machines → virsh           (VM lifecycle, inspect, XML)
 //   Virtual_Machines → virsh-snapshots (snapshot browse/create/manage)
 //   Virtual_Machines → virsh-devices   (disks, NICs, vCPU/memory)
-//   Virtual_Machines → virt-images     (library, download, create, import)
-//   Networking       → virt-net        (libvirt networks + forwarding)
-//   Storage          → virsh-pools     (storage pools and volumes)
+//   Virtual_Machines → virt-images     (image library and downloads)
+//   Virtual_Machines → virt-create     (create from ISO, import a disk)
+//   Virtual_Machines → virt-net        (libvirt networks + forwarding)
+//   Virtual_Machines → virsh-pools     (storage pools)
+//   Virtual_Machines → virsh-volumes   (volumes inside a pool)
 //   Host             → virsh-host      (host info and capabilities)
 //
 // Everything runs on the hypervisor host, and — unlike the bash TUI this came
@@ -77,7 +79,7 @@ export const tools: Tool[] = [
   // ── VM lifecycle, inspection and XML ────────────────────────────────────────
   {
     id: "virsh",
-    label: "virsh — manage VMs",
+    label: "Manage",
     category: "Virtual_Machines",
     deps: ["virt-viewer"],
     verify: LIBVIRT_GATES,
@@ -192,7 +194,7 @@ export const tools: Tool[] = [
   // ── snapshots ───────────────────────────────────────────────────────────────
   {
     id: "virsh-snapshots",
-    label: "VM snapshots",
+    label: "Snapshots",
     category: "Virtual_Machines",
     verify: LIBVIRT_GATES,
     group: "libvirt",
@@ -255,7 +257,7 @@ export const tools: Tool[] = [
   // ── VM hardware ─────────────────────────────────────────────────────────────
   {
     id: "virsh-devices",
-    label: "VM hardware & devices",
+    label: "Hardware",
     category: "Virtual_Machines",
     verify: LIBVIRT_GATES,
     group: "libvirt",
@@ -338,27 +340,20 @@ export const tools: Tool[] = [
     ],
   },
 
-  // ── images, downloads and VM creation ───────────────────────────────────────
+  // ── the image library and downloads ─────────────────────────────────────────
+  // Split from the creation tool below: this half only reads and fills the pool,
+  // so it needs neither virt-install nor any of the VM-shaped fields.
   {
     id: "virt-images",
-    label: "Images & VM creation",
+    label: "Images",
     category: "Virtual_Machines",
     deps: ["wget"],
-    verify: [
-      ...LIBVIRT_GATES,
-      {
-        label: "virt-install",
-        command: "timeout 5 {VIRT_INSTALL_BIN} --version >/dev/null 2>&1 </dev/null",
-        hint: "VIRT_INSTALL_BIN is not runnable — install virt-install (virt-manager on Debian), or set it in Config.",
-      },
-    ],
+    verify: LIBVIRT_GATES,
     group: "libvirt",
     outputDir: "virsh",
     sections: [
       { id: "library", label: "Library" },
       { id: "download", label: "Download" },
-      { id: "create", label: "Create from ISO" },
-      { id: "import", label: "Import disk" },
     ],
     fields: [
       // Global: the Library tab lists it and the Download tab rescans it.
@@ -381,6 +376,57 @@ export const tools: Tool[] = [
       },
       { id: "dlUrl", type: "text", label: "Custom image URL", section: "download", placeholder: "https://example.com/image.iso", when: { field: "dlPreset", equals: "" }, help: "Used when the preset above is Custom URL." },
       { id: "dlIfPresent", type: "select", label: "If it is already downloaded", section: "download", options: { "Download only if newer": "-N", "Keep the existing file": "-nc", "Delete and re-download": '-O "$(basename {dlPreset}{dlUrl})"' }, default: "-N" },
+    ],
+    actions: [
+      // The images directory is typically drwx--x--x root:root, so `ls` fails for
+      // an unprivileged user: --x permits traversal but not listing. Reading the
+      // pool through libvirt's storage API is the only unprivileged way to see
+      // what is actually in there.
+      { id: "volumes", label: "Images in the pool", mode: "captured", section: "library", parse: "virsh.volumes", command: `${V} vol-list {poolName} --details` },
+      { id: "pools", label: "Storage pools", mode: "captured", section: "library", parse: "virsh.pools", command: `${V} pool-list --all --details` },
+      { id: "vms", label: "Existing VMs", mode: "captured", section: "library", parse: "virsh.domains", command: `${V} list --all` },
+      { id: "refresh", label: "Rescan the pool", mode: "captured", section: "library", parse: "virsh.volumes", command: `${V} pool-refresh {poolName} && ${V} vol-list {poolName} --details` },
+      // Keeps sudo: the target directory is root-owned, so wget/7z/rm/chmod all
+      // need root there. The trailing pool-refresh makes the new file show up in
+      // the Library tab without a manual rescan.
+      {
+        id: "download",
+        label: "Download & place in images dir",
+        mode: "terminal",
+        sudo: true,
+        section: "download",
+        command:
+          'cd {IMAGES_DIR} && sudo wget {dlIfPresent} {dlPreset}{dlUrl} && f=$(basename {dlPreset}{dlUrl}) && case "$f" in *.7z) sudo 7z x -y "$f" && sudo rm -f "$f" ;; *.zip) sudo unzip -o "$f" && sudo rm -f "$f" ;; *.tar.*) sudo tar xf "$f" && sudo rm -f "$f" ;; esac ; sudo chmod 644 {IMAGES_DIR}/*.qcow2 {IMAGES_DIR}/*.iso 2>/dev/null ; ' +
+          `${V} pool-refresh {poolName} ; ${V} vol-list {poolName} --details`,
+      },
+    ],
+    notesTitle: "Access",
+    notes: [
+      { label: "Downloading keeps sudo because the images directory is owned by root — everything else on this tool runs unprivileged through libvirt" },
+      { label: "Windows 11 has no direct download URL: fetch the ISO from Microsoft by hand, then move it into the images directory", command: "sudo mv ~/Downloads/Win*.iso {IMAGES_DIR}/" },
+    ],
+  },
+
+  // ── VM creation ─────────────────────────────────────────────────────────────
+  {
+    id: "virt-create",
+    label: "Create",
+    category: "Virtual_Machines",
+    verify: [
+      ...LIBVIRT_GATES,
+      {
+        label: "virt-install",
+        command: "timeout 5 {VIRT_INSTALL_BIN} --version >/dev/null 2>&1 </dev/null",
+        hint: "VIRT_INSTALL_BIN is not runnable — install virt-install (virt-manager on Debian), or set it in Config.",
+      },
+    ],
+    group: "libvirt",
+    outputDir: "virsh",
+    sections: [
+      { id: "create", label: "Create from ISO" },
+      { id: "import", label: "Import disk" },
+    ],
+    fields: [
       { id: "cVmName", type: "text", label: "VM name", section: "create", default: "pwnbox" },
       { id: "cIso", type: "file", label: "Installer ISO", section: "create", fileKind: "file", rootConfig: "IMAGES_DIR", help: "The installer image to boot from." },
       { id: "cOsVariant", type: "select", label: "OS variant", section: "create", options: ["debian12", "debian11", "ubuntu22.04", "win11", "win10", "generic"], default: "debian12" },
@@ -427,27 +473,6 @@ export const tools: Tool[] = [
       },
     ],
     actions: [
-      // The images directory is typically drwx--x--x root:root, so `ls` fails for
-      // an unprivileged user: --x permits traversal but not listing. Reading the
-      // pool through libvirt's storage API is the only unprivileged way to see
-      // what is actually in there.
-      { id: "volumes", label: "Images in the pool", mode: "captured", section: "library", parse: "virsh.volumes", command: `${V} vol-list {poolName} --details` },
-      { id: "pools", label: "Storage pools", mode: "captured", section: "library", parse: "virsh.pools", command: `${V} pool-list --all --details` },
-      { id: "vms", label: "Existing VMs", mode: "captured", section: "library", parse: "virsh.domains", command: `${V} list --all` },
-      { id: "refresh", label: "Rescan the pool", mode: "captured", section: "library", parse: "virsh.volumes", command: `${V} pool-refresh {poolName} && ${V} vol-list {poolName} --details` },
-      // Keeps sudo: the target directory is root-owned, so wget/7z/rm/chmod all
-      // need root there. The trailing pool-refresh makes the new file show up in
-      // the Library tab without a manual rescan.
-      {
-        id: "download",
-        label: "Download & place in images dir",
-        mode: "terminal",
-        sudo: true,
-        section: "download",
-        command:
-          'cd {IMAGES_DIR} && sudo wget {dlIfPresent} {dlPreset}{dlUrl} && f=$(basename {dlPreset}{dlUrl}) && case "$f" in *.7z) sudo 7z x -y "$f" && sudo rm -f "$f" ;; *.zip) sudo unzip -o "$f" && sudo rm -f "$f" ;; *.tar.*) sudo tar xf "$f" && sudo rm -f "$f" ;; esac ; sudo chmod 644 {IMAGES_DIR}/*.qcow2 {IMAGES_DIR}/*.iso 2>/dev/null ; ' +
-          `${V} pool-refresh {poolName} ; ${V} vol-list {poolName} --details`,
-      },
       {
         id: "create",
         label: "Create VM from ISO",
@@ -487,18 +512,17 @@ export const tools: Tool[] = [
     notesTitle: "Windows guests",
     notes: [
       { label: "Download the Windows 11 ISO manually from Microsoft, then move it into the images directory", when: { field: "cOsVariant", in: ["win11", "win10"] }, command: "sudo mv ~/Downloads/Win*.iso {IMAGES_DIR}/" },
-      { label: "Windows needs the VirtIO storage driver at install time — fetch the driver ISO first", when: { field: "cOsVariant", in: ["win11", "win10"] }, command: "sudo wget -N -P {IMAGES_DIR} https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso" },
+      { label: "Windows needs the VirtIO storage driver at install time — fetch the driver ISO first from the Images tool", when: { field: "cOsVariant", in: ["win11", "win10"] } },
       { label: "Install the SPICE guest tools inside the guest for a usable console", when: { field: "cOsVariant", in: ["win11", "win10"] }, command: "sudo dnf install spice-gtk-tools" },
       { label: "Windows Build Tools are worth installing in the guest if you plan to compile there", when: { field: "cOsVariant", in: ["win11", "win10"] } },
-      { label: "Downloading keeps sudo because the images directory is owned by root — everything else on this tool runs unprivileged through libvirt" },
     ],
   },
 
   // ── libvirt networks + forwarding ───────────────────────────────────────────
   {
     id: "virt-net",
-    label: "virsh networks",
-    category: "Networking",
+    label: "Networks",
+    category: "Virtual_Machines",
     deps: ["iptables"],
     verify: LIBVIRT_GATES,
     group: "libvirt",
@@ -582,50 +606,35 @@ export const tools: Tool[] = [
     ],
   },
 
-  // ── storage pools and volumes ───────────────────────────────────────────────
+  // ── storage pools ───────────────────────────────────────────────────────────
+  // Split from the volumes tool below: a pool is the container, a volume is a
+  // file inside one, and the two are managed at different moments. `poolName` is
+  // duplicated across both because each addresses a pool, and the manifest lint
+  // forbids reading a field that belongs to another tool's section.
   {
     id: "virsh-pools",
-    label: "Storage pools & volumes",
-    category: "Storage",
+    label: "Pools",
+    category: "Virtual_Machines",
     verify: LIBVIRT_GATES,
     group: "libvirt",
     outputDir: "virsh",
     sections: [
       { id: "pools", label: "Pools" },
-      { id: "volumes", label: "Volumes" },
       { id: "newpool", label: "New pool" },
-      { id: "newvol", label: "New volume" },
     ],
     fields: [
-      // Global: Volumes and New volume both address a pool, and a blank one would
-      // turn `vol-create-as {poolName} {nvName} {nvCapacity}` into a two-argument
-      // call that virsh reads as pool=name, name=capacity.
       { id: "poolName", type: "text", label: "Storage pool", default: "default", help: "`default` on Debian/Ubuntu, often `images` on Fedora — see the Pools tab." },
       { id: "poolAll", type: "check", label: "Include inactive", section: "pools", flag: "--all", default: "true" },
       { id: "poolDetails", type: "check", label: "Show capacity & allocation", section: "pools", flag: "--details", default: "true" },
       { id: "poolType", type: "text", label: "Only this type", section: "pools", placeholder: "dir,netfs" },
       { id: "poolAutostart", type: "segment", label: "Autostart", section: "pools", options: { Enable: "", Disable: "--disable" }, default: "" },
       { id: "poolDelConfirm", type: "text", label: "Type DELETE to arm storage deletion", section: "pools", placeholder: "DELETE" },
-      { id: "volName", type: "text", label: "Volume", section: "volumes", placeholder: "pwnbox.qcow2" },
-      { id: "volDetails", type: "check", label: "Show capacity & allocation", section: "volumes", flag: "--details", default: "true" },
-      { id: "volNewName", type: "text", label: "Clone name", section: "volumes", placeholder: "pwnbox-copy.qcow2" },
-      { id: "volNewSize", type: "text", label: "New size", section: "volumes", placeholder: "80G" },
-      { id: "volShrink", type: "check", label: "Allow shrinking", section: "volumes", flag: "--shrink" },
-      { id: "volFile", type: "file", label: "Local file to upload", section: "volumes" },
-      { id: "volDelConfirm", type: "text", label: "Type DELETE to arm volume deletion", section: "volumes", placeholder: "DELETE" },
       { id: "npName", type: "text", label: "Pool name", section: "newpool", default: "toolbox-pool" },
       { id: "npType", type: "select", label: "Pool type", section: "newpool", options: ["dir", "fs", "netfs", "logical", "disk", "iscsi", "gluster", "zfs"], default: "dir" },
       { id: "npTarget", type: "file", label: "Target directory", section: "newpool", fileKind: "folder", rootConfig: "IMAGES_DIR", default: "{IMAGES_DIR}" },
       { id: "npSourceHost", type: "text", label: "Source host", section: "newpool", when: { field: "npType", in: ["netfs", "iscsi", "gluster"] } },
       { id: "npSourcePath", type: "text", label: "Source path", section: "newpool", when: { field: "npType", in: ["fs", "netfs", "gluster"] } },
       { id: "npSourceDev", type: "text", label: "Source device", section: "newpool", when: { field: "npType", in: ["logical", "disk"] } },
-      { id: "nvName", type: "text", label: "Volume name", section: "newvol", default: "new-disk.qcow2" },
-      { id: "nvCapacity", type: "text", label: "Capacity", section: "newvol", default: "20G" },
-      { id: "nvFormat", type: "select", label: "Format", section: "newvol", options: ["qcow2", "raw", "qed", "vmdk"], default: "qcow2" },
-      { id: "nvAlloc", type: "text", label: "Initial allocation", section: "newvol", placeholder: "0" },
-      { id: "nvPrealloc", type: "check", label: "Preallocate metadata", section: "newvol", flag: "--prealloc-metadata" },
-      { id: "nvBacking", type: "text", label: "Backing volume", section: "newvol", placeholder: "base.qcow2" },
-      { id: "nvBackingFmt", type: "select", label: "Backing format", section: "newvol", options: ["qcow2", "raw"], default: "qcow2", when: { field: "nvBacking", truthy: true } },
     ],
     actions: [
       { id: "list", label: "List pools", mode: "captured", section: "pools", parse: "virsh.pools", command: `${V} pool-list {poolAll} {poolDetails} [[--type {poolType}]]` },
@@ -649,6 +658,49 @@ export const tools: Tool[] = [
         when: { field: "poolDelConfirm", equals: "DELETE" },
         command: `${V} pool-delete {poolName} && ${V} pool-list --all --details`,
       },
+      { id: "define", label: "Define pool only", mode: "captured", section: "newpool", parse: "virsh.pools", command: `${V} pool-define-as {npName} {npType} [[--source-host {npSourceHost}]] [[--source-path {npSourcePath}]] [[--source-dev {npSourceDev}]] [[--target {npTarget}]] && ${V} pool-list --all --details` },
+      { id: "create", label: "Define, build, start & autostart", mode: "captured", section: "newpool", parse: "virsh.pools", command: `${V} pool-define-as {npName} {npType} [[--source-host {npSourceHost}]] [[--source-path {npSourcePath}]] [[--source-dev {npSourceDev}]] [[--target {npTarget}]] && ${V} pool-build {npName} && ${V} pool-start {npName} && ${V} pool-autostart {npName} && ${V} pool-list --all --details` },
+    ],
+    notesTitle: "Access",
+    notes: [
+      ...ACCESS_NOTES,
+      { label: "Undefine removes only the pool's definition; Delete removes the files it points at, which is why the latter has to be armed with the word DELETE" },
+    ],
+  },
+
+  // ── storage volumes ─────────────────────────────────────────────────────────
+  {
+    id: "virsh-volumes",
+    label: "Volumes",
+    category: "Virtual_Machines",
+    verify: LIBVIRT_GATES,
+    group: "libvirt",
+    outputDir: "virsh",
+    sections: [
+      { id: "volumes", label: "Volumes" },
+      { id: "newvol", label: "New volume" },
+    ],
+    fields: [
+      // Global: Volumes and New volume both address a pool, and a blank one would
+      // turn `vol-create-as {poolName} {nvName} {nvCapacity}` into a two-argument
+      // call that virsh reads as pool=name, name=capacity.
+      { id: "poolName", type: "text", label: "Storage pool", default: "default", help: "`default` on Debian/Ubuntu, often `images` on Fedora — see the Pools tool." },
+      { id: "volName", type: "text", label: "Volume", section: "volumes", placeholder: "pwnbox.qcow2" },
+      { id: "volDetails", type: "check", label: "Show capacity & allocation", section: "volumes", flag: "--details", default: "true" },
+      { id: "volNewName", type: "text", label: "Clone name", section: "volumes", placeholder: "pwnbox-copy.qcow2" },
+      { id: "volNewSize", type: "text", label: "New size", section: "volumes", placeholder: "80G" },
+      { id: "volShrink", type: "check", label: "Allow shrinking", section: "volumes", flag: "--shrink" },
+      { id: "volFile", type: "file", label: "Local file to upload", section: "volumes" },
+      { id: "volDelConfirm", type: "text", label: "Type DELETE to arm volume deletion", section: "volumes", placeholder: "DELETE" },
+      { id: "nvName", type: "text", label: "Volume name", section: "newvol", default: "new-disk.qcow2" },
+      { id: "nvCapacity", type: "text", label: "Capacity", section: "newvol", default: "20G" },
+      { id: "nvFormat", type: "select", label: "Format", section: "newvol", options: ["qcow2", "raw", "qed", "vmdk"], default: "qcow2" },
+      { id: "nvAlloc", type: "text", label: "Initial allocation", section: "newvol", placeholder: "0" },
+      { id: "nvPrealloc", type: "check", label: "Preallocate metadata", section: "newvol", flag: "--prealloc-metadata" },
+      { id: "nvBacking", type: "text", label: "Backing volume", section: "newvol", placeholder: "base.qcow2" },
+      { id: "nvBackingFmt", type: "select", label: "Backing format", section: "newvol", options: ["qcow2", "raw"], default: "qcow2", when: { field: "nvBacking", truthy: true } },
+    ],
+    actions: [
       { id: "vols", label: "List volumes", mode: "captured", section: "volumes", parse: "virsh.volumes", command: `${V} vol-list {poolName} {volDetails}` },
       { id: "vol-info", label: "Volume info", mode: "captured", section: "volumes", parse: "virsh.info", command: `${V} vol-info --pool {poolName} {volName}` },
       { id: "vol-path", label: "Volume path", mode: "captured", section: "volumes", command: `${V} vol-path --pool {poolName} {volName}` },
@@ -676,21 +728,19 @@ export const tools: Tool[] = [
         when: { field: "volDelConfirm", equals: "DELETE" },
         command: `${V} vol-wipe --pool {poolName} {volName}`,
       },
-      { id: "define", label: "Define pool only", mode: "captured", section: "newpool", parse: "virsh.pools", command: `${V} pool-define-as {npName} {npType} [[--source-host {npSourceHost}]] [[--source-path {npSourcePath}]] [[--source-dev {npSourceDev}]] [[--target {npTarget}]] && ${V} pool-list --all --details` },
-      { id: "create", label: "Define, build, start & autostart", mode: "captured", section: "newpool", parse: "virsh.pools", command: `${V} pool-define-as {npName} {npType} [[--source-host {npSourceHost}]] [[--source-path {npSourcePath}]] [[--source-dev {npSourceDev}]] [[--target {npTarget}]] && ${V} pool-build {npName} && ${V} pool-start {npName} && ${V} pool-autostart {npName} && ${V} pool-list --all --details` },
       { id: "vol-create", label: "Create volume", mode: "captured", section: "newvol", parse: "virsh.volumes", command: `${V} vol-create-as {poolName} {nvName} {nvCapacity} --format {nvFormat} [[--allocation {nvAlloc}]] {nvPrealloc} [[--backing-vol {nvBacking}]] [[--backing-vol-format {nvBackingFmt}]] && ${V} vol-list {poolName} --details` },
     ],
     notesTitle: "Access",
     notes: [
       ...ACCESS_NOTES,
-      { label: "Undefine removes only the pool's definition; Delete removes the files it points at, which is why the latter has to be armed with the word DELETE" },
+      { label: "Delete removes the volume's file; Wipe overwrites its contents in place. Both are armed with the word DELETE because neither prompts" },
     ],
   },
 
   // ── host information ────────────────────────────────────────────────────────
   {
     id: "virsh-host",
-    label: "Host & capabilities",
+    label: "Info",
     category: "Host",
     verify: LIBVIRT_GATES,
     // No `group` gate: everything here is read-only, and libvirt grants

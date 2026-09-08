@@ -1,6 +1,7 @@
 # Manage your VMs
 
-The **virsh** tool lists and controls your libvirt/KVM virtual machines:
+The **Manage** tool, under *Virtual_Machines*, lists and controls your
+libvirt/KVM virtual machines:
 
 - **Manage** — list, start, shutdown, suspend/resume, reboot, force-reset, autostart,
   save/restore, the serial console and the graphical viewer.
@@ -18,6 +19,6 @@ libvirt uses socket-activated modular daemons that report "inactive" while worki
 perfectly. If **libvirt group** is red, use its **Add me** button and log back in —
 group membership is what grants unprivileged access, for writes as well as reads.
 
-Snapshots have their own tool now, alongside **VM hardware & devices**,
-**Storage pools & volumes** and **Host & capabilities**. Need an image or a fresh
-VM? Open **Images & VM creation**.
+Snapshots have their own tool now, alongside **Hardware**, **Networks**,
+**Pools** and **Volumes** — and the hypervisor itself is under *Host* ▸ **Info**.
+Need an image or a fresh VM? Open **Images**, then **Create**.

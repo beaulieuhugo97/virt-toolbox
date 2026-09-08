@@ -58,7 +58,7 @@ export const tools: Tool[] = [
   // ── containers ──────────────────────────────────────────────────────────────
   {
     id: "docker",
-    label: "Docker containers",
+    label: "Containers",
     category: "Container",
     verify: DOCKER_GATES,
     service: "docker",
@@ -158,7 +158,7 @@ export const tools: Tool[] = [
   // ── images ──────────────────────────────────────────────────────────────────
   {
     id: "docker-images",
-    label: "Docker images",
+    label: "Images",
     category: "Container",
     verify: DOCKER_GATES,
     service: "docker",
@@ -208,7 +208,7 @@ export const tools: Tool[] = [
   // ── networks ────────────────────────────────────────────────────────────────
   {
     id: "docker-networks",
-    label: "Docker networks",
+    label: "Networks",
     category: "Container",
     verify: DOCKER_GATES,
     service: "docker",
@@ -253,7 +253,7 @@ export const tools: Tool[] = [
   // ── volumes ─────────────────────────────────────────────────────────────────
   {
     id: "docker-volumes",
-    label: "Docker volumes",
+    label: "Volumes",
     category: "Container",
     verify: DOCKER_GATES,
     service: "docker",
@@ -300,7 +300,7 @@ export const tools: Tool[] = [
   // ── compose ─────────────────────────────────────────────────────────────────
   {
     id: "docker-compose",
-    label: "Docker Compose",
+    label: "Compose",
     category: "Container",
     verify: [
       ...DOCKER_GATES,

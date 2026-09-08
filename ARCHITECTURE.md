@@ -11,18 +11,20 @@ there is no per-tool UI code. Adding a tool means adding a manifest entry.
 
 | Category | Tool | What it does |
 | --- | --- | --- |
-| Virtual Machines | **virsh** | List, start/stop, suspend/resume, reboot, force-reset, autostart, save/restore, console and viewer; inspect info/stats/XML; define, rename and delete. |
-| Virtual Machines | **VM snapshots** | Browse as a table or tree, create with disk-only/quiesce/atomic/halt, revert, delete with or without children, edit snapshot XML. |
-| Virtual Machines | **VM hardware & devices** | Block devices and interfaces, attach/detach disks and NICs, change media, resize disks, set vCPUs and memory, per-device statistics. |
-| Virtual Machines | **Images & VM creation** | Browse the pool through libvirt (the images dir is not readable unprivileged), download an ISO/qcow2, create a VM with `virt-install` or import a disk, with an XML dry run. |
-| Networking | **virsh networks** | List/inspect networks, create NAT / host-only / isolated networks (`net-define`), start/stop/undefine, DHCP leases, ports, and IP-forwarding rules. |
-| Storage | **Storage pools & volumes** | Pools with capacity and allocation, define/build/start/refresh, volumes list/create/resize/clone/upload/download, and armed deletion. |
-| Host | **Host & capabilities** | libvirt and hypervisor versions, host CPU and memory, host and guest capabilities, NUMA free pages, and host devices. |
-| Container | **Docker containers** | Run a throwaway container, then list/start/stop/restart/kill, exec a shell, follow logs, stats, copy files out, inspect and remove. |
-| Container | **Docker images** | List, pull, tag, push, build from a Dockerfile, layer history, save/load a tar, disk usage and pruning. |
-| Container | **Docker networks** | List/inspect, create bridge / macvlan / ipvlan / overlay networks, connect and disconnect containers, remove and prune. |
-| Container | **Docker volumes** | List/inspect, see which containers use one and its size, create, remove, and back up / restore through a helper container. |
-| Container | **Docker Compose** | Up/down a stack, per-service start/stop/restart/build/pull/exec, service status, logs and the merged config. |
+| Virtual_Machines | **Manage** | List, start/stop, suspend/resume, reboot, force-reset, autostart, save/restore, console and viewer; inspect info/stats/XML; define, rename and delete. |
+| Virtual_Machines | **Snapshots** | Browse as a table or tree, create with disk-only/quiesce/atomic/halt, revert, delete with or without children, edit snapshot XML. |
+| Virtual_Machines | **Hardware** | Block devices and interfaces, attach/detach disks and NICs, change media, resize disks, set vCPUs and memory, per-device statistics. |
+| Virtual_Machines | **Images** | Browse the pool through libvirt (the images dir is not readable unprivileged), rescan it, and download an ISO/qcow2 into it. |
+| Virtual_Machines | **Create** | Create a VM with `virt-install` from an installer ISO, or import an existing disk, each with an XML dry run. |
+| Virtual_Machines | **Networks** | List/inspect networks, create NAT / host-only / isolated networks (`net-define`), start/stop/undefine, DHCP leases, ports, and IP-forwarding rules. |
+| Virtual_Machines | **Pools** | Pools with capacity and allocation, define/build/start/refresh, autostart, XML, and armed deletion of the underlying storage. |
+| Virtual_Machines | **Volumes** | Volumes inside a pool: list/create/resize/clone/upload/download, and armed delete or wipe. |
+| Host | **Info** | libvirt and hypervisor versions, host CPU and memory, host and guest capabilities, NUMA free pages, and host devices. |
+| Container | **Containers** | Run a throwaway container, then list/start/stop/restart/kill, exec a shell, follow logs, stats, copy files out, inspect and remove. |
+| Container | **Images** | List, pull, tag, push, build from a Dockerfile, layer history, save/load a tar, disk usage and pruning. |
+| Container | **Networks** | List/inspect, create bridge / macvlan / ipvlan / overlay networks, connect and disconnect containers, remove and prune. |
+| Container | **Volumes** | List/inspect, see which containers use one and its size, create, remove, and back up / restore through a helper container. |
+| Container | **Compose** | Up/down a stack, per-service start/stop/restart/build/pull/exec, service status, logs and the merged config. |
 
 ## The host owns the command
 

@@ -34,18 +34,34 @@ still works, but VMs fall back to plain emulation and run very slowly.
 
 | Tool | What it covers |
 | --- | --- |
-| **virsh** | VM lifecycle — start, shutdown, suspend, reboot, autostart, save/restore, console and viewer — plus inspect, XML editing and a two-step armed delete |
-| **VM snapshots** | list as a table, create (disk-only, quiesced, atomic, halt), revert, delete with or without children, and edit snapshot XML |
-| **VM hardware & devices** | attach/detach disks and interfaces, change CD-ROM media, set vCPUs and memory, and read per-device statistics |
-| **Images & VM creation** | browse the pool's images without root, download an ISO, create a VM from one (`virt-install`) or import an existing qcow2 — with an XML dry run |
-| **virsh networks** | list/start/stop libvirt networks, create NAT / host-only / isolated networks, inspect ports and leases, and toggle IP forwarding |
-| **Storage pools & volumes** | list pools and volumes with capacity, create/resize/clone/upload volumes, define and build pools, and armed deletion |
-| **Host & capabilities** | libvirt and hypervisor versions, host CPU/memory, guest capabilities, NUMA free pages and host devices for passthrough |
-| **Docker containers** | run a throwaway container, then list, start/stop/kill, exec a shell, follow logs, copy files out and remove — listings render as sortable tables |
-| **Docker images** | list, pull, tag, push, build from a Dockerfile, layer history, save/load a tar, disk usage and pruning |
-| **Docker networks** | list/inspect, create bridge / macvlan / ipvlan / overlay networks, connect and disconnect containers |
-| **Docker volumes** | list/inspect, size and users, create, remove, and back up / restore through a helper container |
-| **Docker Compose** | up/down a stack, per-service start/stop/build/exec, service status, logs and the merged config |
+Virtual machines:
+
+| Tool | What it covers |
+| --- | --- |
+| **Manage** | VM lifecycle — start, shutdown, suspend, reboot, autostart, save/restore, console and viewer — plus inspect, XML editing and a two-step armed delete |
+| **Snapshots** | list as a table, create (disk-only, quiesced, atomic, halt), revert, delete with or without children, and edit snapshot XML |
+| **Hardware** | attach/detach disks and interfaces, change CD-ROM media, set vCPUs and memory, and read per-device statistics |
+| **Images** | browse the pool's images without root, rescan the pool, and download an ISO or qcow2 into it |
+| **Create** | create a VM from an installer ISO (`virt-install`) or import an existing qcow2 — each with an XML dry run |
+| **Networks** | list/start/stop libvirt networks, create NAT / host-only / isolated networks, inspect ports and leases, and toggle IP forwarding |
+| **Pools** | list pools with capacity, define, build, start and autostart them, edit their XML, and armed deletion of the underlying storage |
+| **Volumes** | list volumes with capacity, create/resize/clone/upload/download, and an armed delete or wipe |
+
+Containers:
+
+| Tool | What it covers |
+| --- | --- |
+| **Containers** | run a throwaway container, then list, start/stop/kill, exec a shell, follow logs, copy files out and remove — listings render as sortable tables |
+| **Images** | list, pull, tag, push, build from a Dockerfile, layer history, save/load a tar, disk usage and pruning |
+| **Networks** | list/inspect, create bridge / macvlan / ipvlan / overlay networks, connect and disconnect containers |
+| **Volumes** | list/inspect, size and users, create, remove, and back up / restore through a helper container |
+| **Compose** | up/down a stack, per-service start/stop/build/exec, service status, logs and the merged config |
+
+Host:
+
+| Tool | What it covers |
+| --- | --- |
+| **Info** | libvirt and hypervisor versions, host CPU/memory, guest capabilities, NUMA free pages and host devices for passthrough |
 
 ## 🔗 Requirements
 
