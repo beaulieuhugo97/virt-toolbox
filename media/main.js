@@ -62,6 +62,8 @@
     "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.6-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.49.49 0 00-.49-.42h-3.84a.49.49 0 00-.49.42l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.6.22L2.74 8.87a.49.49 0 00.12.61l2.03 1.58c-.05.3-.07.62-.07.94 0 .32.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.13.24.41.33.6.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.06.24.26.42.49.42h3.84c.24 0 .44-.18.49-.42l.36-2.54c.59-.24 1.12-.56 1.62-.94l2.39.96c.23.09.51 0 .6-.22l1.92-3.32a.49.49 0 00-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 110-7.2 3.6 3.6 0 010 7.2z";
   const ICON_HISTORY =
     "M13 3a9 9 0 00-9 9H1l3.89 3.89.07.14L9 12H6a7 7 0 117 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.99 8.99 0 0013 21a9 9 0 000-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z";
+  const ICON_SYNC =
+    "M12 4V1L8 5l4 4V6a6 6 0 015.2 8.98l1.46 1.46A8 8 0 0012 4zm0 14a6 6 0 01-5.2-8.98L5.34 7.56A8 8 0 0012 20v3l4-4-4-4v3z";
   function statusLine(cls, label) {
     return el("div", { class: "run-status " + (cls || "") }, [spinner(), document.createTextNode(" " + label)]);
   }
@@ -629,6 +631,24 @@
     ]));
     links.appendChild(el("button", { class: "run-secondary home-link", type: "button", onclick: () => vscode.postMessage({ type: "openHistory" }) }, [
       svgIcon(ICON_HISTORY), document.createTextNode("Run history"),
+    ]));
+    // Self-update: pulls the git checkout the VSIX was built from, rebuilds it
+    // and reinstalls. Highlighted when the host's last check found new commits.
+    const upd = m.update || {};
+    links.appendChild(el("button", {
+      class: (upd.available ? "run" : "run-secondary") + " home-link",
+      type: "button",
+      title: upd.available
+        ? "New commits on GitHub — pull, rebuild and reinstall the extension"
+        : "Pull the latest version from GitHub, rebuild and reinstall",
+      onclick: () => vscode.postMessage({ type: "update" }),
+    }, [
+      svgIcon(ICON_SYNC),
+      document.createTextNode(
+        upd.available
+          ? "Update available" + (upd.latest ? " → v" + upd.latest : "")
+          : "Update extension" + (upd.current ? " (v" + upd.current + ")" : "")
+      ),
     ]));
     root.appendChild(links);
 

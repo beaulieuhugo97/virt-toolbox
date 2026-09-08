@@ -98,7 +98,18 @@ code --install-extension virt-toolbox.vsix
 ## 🔄 Updating
 
 The toolbox is side-loaded, not on the marketplace, so VS Code will never update
-it for you. Pull and rebuild in place:
+it for you — the extension updates itself instead. **Update extension** on the home
+dashboard (also **Virtualization Toolbox: Update Extension** in the command palette,
+and the cloud icon in the Tools title bar) pulls the checkout the VSIX was built
+from, rebuilds it, reinstalls it and offers a window reload. Uncommitted changes in
+the checkout are stashed after asking, never discarded.
+
+On startup it checks GitHub at most once every six hours and badges the Tools view
+when new commits are waiting; turn that off with `virtToolbox.checkForUpdatesOnStartup`.
+The checkout is auto-detected (an open workspace folder, then `~/.virt-toolbox`) —
+point `virtToolbox.sourcePath` at it if it lives somewhere else.
+
+The same thing by hand:
 
 ```bash
 cd ~/.virt-toolbox && git pull && npm install && npm run package \

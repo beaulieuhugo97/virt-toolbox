@@ -82,6 +82,9 @@ export class ToolboxPanel {
   /** One tab per tool, keyed by tool id. */
   private toolSessions = new Map<string, Session>();
 
+  /** Latest self-update check result, surfaced on the home dashboard's button. */
+  private updateInfo?: { available: boolean; current?: string; latest?: string; behind?: number };
+
   /** Number of captured runs in flight across all tabs (drives the status bar). */
   private runningCount = 0;
 
@@ -135,6 +138,14 @@ export class ToolboxPanel {
   private forEachSession(fn: (s: Session) => void): void {
     if (this.dashboard) fn(this.dashboard);
     for (const s of this.toolSessions.values()) fn(s);
+  }
+
+  /** Record the last update-check result and refresh any open home dashboard. */
+  setUpdateInfo(info?: { available: boolean; current?: string; latest?: string; behind?: number } | null): void {
+    this.updateInfo = info || undefined;
+    this.forEachSession((s) => {
+      if (s.view.kind === "home") this.refreshSession(s);
+    });
   }
 
   // ---- opening views ---------------------------------------------------------
@@ -304,6 +315,7 @@ export class ToolboxPanel {
       config,
       quickTools,
       recent: this.history.all().slice(0, 6),
+      update: this.updateInfo,
     };
   }
 
@@ -394,6 +406,9 @@ export class ToolboxPanel {
         break;
       case "openHistory":
         this.openHistory();
+        break;
+      case "update":
+        void vscode.commands.executeCommand("virtToolbox.update");
         break;
       case "startService":
         this.engine.runInTerminal(`sudo systemctl start ${m.service}`, this.outputsRoot, `start ${m.service}`);

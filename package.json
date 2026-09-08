@@ -116,6 +116,18 @@
         "title": "Toggle Panel Theme (Adaptive / HTB)",
         "category": "Virtualization Toolbox",
         "icon": "$(color-mode)"
+      },
+      {
+        "command": "virtToolbox.update",
+        "title": "Update Extension (pull from GitHub)",
+        "category": "Virtualization Toolbox",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "virtToolbox.checkForUpdate",
+        "title": "Check for Updates",
+        "category": "Virtualization Toolbox",
+        "icon": "$(sync)"
       }
     ],
     "menus": {
@@ -149,6 +161,16 @@
           "command": "virtToolbox.toggleTheme",
           "when": "view == virtToolboxTools",
           "group": "navigation@5"
+        },
+        {
+          "command": "virtToolbox.update",
+          "when": "view == virtToolboxTools",
+          "group": "update@0"
+        },
+        {
+          "command": "virtToolbox.checkForUpdate",
+          "when": "view == virtToolboxTools",
+          "group": "update@1"
         }
       ],
       "view/item/context": [
@@ -196,6 +218,16 @@
           "type": "boolean",
           "default": true,
           "description": "Open the Virtualization Toolbox dashboard automatically the first time the Tools view is revealed."
+        },
+        "virtToolbox.sourcePath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the Virtualization Toolbox git checkout used by **Update Extension**. Leave empty to auto-detect (the development repo, an open workspace folder, then `~/.virt-toolbox`)."
+        },
+        "virtToolbox.checkForUpdatesOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check GitHub for a newer Virtualization Toolbox on startup (at most once every 6 hours) and badge the Tools view when one is available."
         },
         "virtToolbox.outputsPath": {
           "type": "string",

@@ -86,6 +86,28 @@ ok("the config card shows the resolved libvirt URI", appText().includes("qemu://
 click($$(".home-link").find((b) => b.textContent!.includes("Configuration")));
 ok("the Configuration link opens the config view", posted.some((m) => m.type === "openConfig"));
 
+// ── the self-update button ────────────────────────────────────────────────────
+const updateLink = () => $$(".home-link").find((b) => b.textContent!.includes("Update"));
+ok("the dashboard offers an update button with no check result yet", !!updateLink());
+click(updateLink());
+ok("the update button asks the host to update", posted.some((m) => m.type === "update"));
+
+send({
+  type: "showHome",
+  stats: {},
+  categories: [],
+  config: [],
+  quickTools: [],
+  recent: [],
+  update: { available: true, current: "1.1.0", latest: "1.2.0", behind: 3 },
+});
+eq("an available update names the version it would install", updateLink()?.textContent, "Update available → v1.2.0");
+ok("…and is highlighted as the primary action", updateLink()!.classList.contains("run"));
+
+send({ type: "showHome", stats: {}, categories: [], config: [], quickTools: [], recent: [], update: { available: false, current: "1.1.0" } });
+eq("an up-to-date checkout shows the installed version", updateLink()?.textContent, "Update extension (v1.1.0)");
+ok("…and stays a secondary action", updateLink()!.classList.contains("run-secondary"));
+
 
 // ── the views these changes touch in passing ──────────────────────────────────
 send({

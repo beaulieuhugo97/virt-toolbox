@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Added — self-update
+
+The extension can now update itself, the way the pentest toolbox does. **Update
+extension** on the home dashboard, `Virtualization Toolbox: Update Extension` in the
+command palette, and a cloud icon in the Tools title bar all run the sequence the
+README used to print by hand: pull the git checkout the VSIX was built from, `npm
+install`, rebuild the VSIX, reinstall it, then offer a window reload. Every step
+streams into a "Virtualization Toolbox Update" output channel, and uncommitted work
+in the checkout is stashed after asking rather than discarded.
+
+- On activation it checks GitHub at most once every six hours and badges the Tools
+  view with the number of new commits — no notification. `Check for Updates` runs the
+  check on demand; `virtToolbox.checkForUpdatesOnStartup` turns the automatic one off.
+- The checkout is auto-detected — the development repo, an open workspace folder,
+  then `~/.virt-toolbox` — and `virtToolbox.sourcePath` overrides it.
+
 ### Changed — how libvirt tools reach libvirt
 
 **This changes the access model.** Every virsh action used to run `sudo virsh` in a

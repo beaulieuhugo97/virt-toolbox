@@ -8,8 +8,12 @@ import { HistoryStore } from "./history/historyStore";
 import { FavoritesStore } from "./favorites/favoritesStore";
 import { ToolTreeProvider, TreeNode } from "./tree/treeProvider";
 import { ToolboxPanel } from "./webview/panel";
+import { Updater } from "./update/updater";
 
 const WALKTHROUGH_SHOWN_KEY = "virtToolbox.walkthroughShown";
+const UPDATE_CHECKED_KEY = "virtToolbox.lastUpdateCheck";
+/** Don't hit the network on every window open — check at most once every 6h. */
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Where runs land — each tool's commands execute in `<outputsRoot>/<tool>/`, and
@@ -39,6 +43,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const engine = new ExecutionEngine();
   const favorites = new FavoritesStore(context.globalState);
   const history = new HistoryStore(context.workspaceState);
+  const updater = new Updater(context);
   // through the generic form engine.
   const panel = new ToolboxPanel(context, registry, config, engine, history, favorites, outputsRoot);
 
@@ -50,6 +55,50 @@ export function activate(context: vscode.ExtensionContext): void {
     showCollapseAll: true,
   });
   favorites.onDidChange(() => tree.refresh());
+
+  // Surface an available update on the Tools view (a badge) and on Home (the
+  // update button), without nagging with a notification.
+  const applyUpdateInfo = (info: Awaited<ReturnType<Updater["check"]>>) => {
+    panel.setUpdateInfo(
+      info && { available: info.available, current: info.localVersion, latest: info.remoteVersion, behind: info.behind }
+    );
+    treeView.badge = info?.available
+      ? {
+          value: info.behind,
+          tooltip: `Virtualization Toolbox update available${info.remoteVersion ? ` (v${info.remoteVersion})` : ""}`,
+        }
+      : undefined;
+  };
+
+  const checkForUpdate = async (silent: boolean) => {
+    const info = await updater.check().catch(() => undefined);
+    applyUpdateInfo(info);
+    if (silent) return;
+    if (!info) {
+      void vscode.window.showErrorMessage(
+        'Could not check for Virtualization Toolbox updates — see the "Virtualization Toolbox Update" output.'
+      );
+      return;
+    }
+    if (!info.available) {
+      void vscode.window.showInformationMessage(`Virtualization Toolbox is up to date (v${info.localVersion}).`);
+      return;
+    }
+    const pick = await vscode.window.showInformationMessage(
+      `Virtualization Toolbox update available${info.remoteVersion ? `: v${info.localVersion} → v${info.remoteVersion}` : ""}.`,
+      "Update Now"
+    );
+    if (pick) await updater.update();
+  };
+
+  // Background check on activation, throttled, and opt-out via setting.
+  if (vscode.workspace.getConfiguration("virtToolbox").get<boolean>("checkForUpdatesOnStartup", true)) {
+    const last = context.globalState.get<number>(UPDATE_CHECKED_KEY, 0);
+    if (Date.now() - last > UPDATE_CHECK_INTERVAL_MS) {
+      void context.globalState.update(UPDATE_CHECKED_KEY, Date.now());
+      void checkForUpdate(true);
+    }
+  }
 
   // Status bar: a spinner while a captured run is in flight, click to configure.
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -127,6 +176,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("virtToolbox.openConfig", () => panel.openConfig()),
     vscode.commands.registerCommand("virtToolbox.history", () => panel.openHistory()),
     vscode.commands.registerCommand("virtToolbox.refresh", () => tree.refresh()),
+    vscode.commands.registerCommand("virtToolbox.update", async () => {
+      await updater.update();
+      await checkForUpdate(true);
+    }),
+    vscode.commands.registerCommand("virtToolbox.checkForUpdate", () => checkForUpdate(false)),
     vscode.commands.registerCommand("virtToolbox.toggleTheme", async () => {
       const cfg = vscode.workspace.getConfiguration("virtToolbox");
       const next = cfg.get<string>("theme", "adaptive") === "htb" ? "adaptive" : "htb";
@@ -137,6 +191,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const id = typeof node === "string" ? node : node?.kind === "tool" ? node.tool.id : undefined;
       if (id) void favorites.toggle(id);
     }),
+    updater,
     { dispose: () => engine.dispose() },
     { dispose: () => panel.dispose() }
   );
