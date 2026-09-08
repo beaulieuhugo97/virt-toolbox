@@ -2,7 +2,6 @@
 // category path, so a folder gets the same icon wherever it appears and new
 // manifests reusing an existing folder name are covered for free.
 const ICONS: Record<string, string> = {
-  Virtualization: "vm",
   Virtual_Machines: "vm",
   Container: "package",
   Networking: "radio-tower",

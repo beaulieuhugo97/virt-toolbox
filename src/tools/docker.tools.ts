@@ -59,7 +59,7 @@ export const tools: Tool[] = [
   {
     id: "docker",
     label: "Docker containers",
-    category: "Virtualization/Container",
+    category: "Container",
     verify: DOCKER_GATES,
     service: "docker",
     group: "docker",
@@ -159,7 +159,7 @@ export const tools: Tool[] = [
   {
     id: "docker-images",
     label: "Docker images",
-    category: "Virtualization/Container",
+    category: "Container",
     verify: DOCKER_GATES,
     service: "docker",
     group: "docker",
@@ -209,7 +209,7 @@ export const tools: Tool[] = [
   {
     id: "docker-networks",
     label: "Docker networks",
-    category: "Virtualization/Container",
+    category: "Container",
     verify: DOCKER_GATES,
     service: "docker",
     group: "docker",
@@ -254,7 +254,7 @@ export const tools: Tool[] = [
   {
     id: "docker-volumes",
     label: "Docker volumes",
-    category: "Virtualization/Container",
+    category: "Container",
     verify: DOCKER_GATES,
     service: "docker",
     group: "docker",
@@ -301,7 +301,7 @@ export const tools: Tool[] = [
   {
     id: "docker-compose",
     label: "Docker Compose",
-    category: "Virtualization/Container",
+    category: "Container",
     verify: [
       ...DOCKER_GATES,
       {

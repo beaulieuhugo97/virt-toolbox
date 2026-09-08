@@ -1,13 +1,13 @@
 // The libvirt domain, ported from the libvirt/virsh bash TUI this project grew
 // out of. Seven tools grouped by the tree:
 //
-//   Virtualization/Virtual_Machines → virsh           (VM lifecycle, inspect, XML)
-//   Virtualization/Virtual_Machines → virsh-snapshots (snapshot browse/create/manage)
-//   Virtualization/Virtual_Machines → virsh-devices   (disks, NICs, vCPU/memory)
-//   Virtualization/Virtual_Machines → virt-images     (library, download, create, import)
-//   Virtualization/Networking       → virt-net        (libvirt networks + forwarding)
-//   Virtualization/Storage          → virsh-pools     (storage pools and volumes)
-//   Virtualization/Host             → virsh-host      (host info and capabilities)
+//   Virtual_Machines → virsh           (VM lifecycle, inspect, XML)
+//   Virtual_Machines → virsh-snapshots (snapshot browse/create/manage)
+//   Virtual_Machines → virsh-devices   (disks, NICs, vCPU/memory)
+//   Virtual_Machines → virt-images     (library, download, create, import)
+//   Networking       → virt-net        (libvirt networks + forwarding)
+//   Storage          → virsh-pools     (storage pools and volumes)
+//   Host             → virsh-host      (host info and capabilities)
 //
 // Everything runs on the hypervisor host, and — unlike the bash TUI this came
 // from — almost nothing runs under sudo. Membership of the `libvirt` group is
@@ -78,7 +78,7 @@ export const tools: Tool[] = [
   {
     id: "virsh",
     label: "virsh — manage VMs",
-    category: "Virtualization/Virtual_Machines",
+    category: "Virtual_Machines",
     deps: ["virt-viewer"],
     verify: LIBVIRT_GATES,
     group: "libvirt",
@@ -193,7 +193,7 @@ export const tools: Tool[] = [
   {
     id: "virsh-snapshots",
     label: "VM snapshots",
-    category: "Virtualization/Virtual_Machines",
+    category: "Virtual_Machines",
     verify: LIBVIRT_GATES,
     group: "libvirt",
     outputDir: "virsh",
@@ -256,7 +256,7 @@ export const tools: Tool[] = [
   {
     id: "virsh-devices",
     label: "VM hardware & devices",
-    category: "Virtualization/Virtual_Machines",
+    category: "Virtual_Machines",
     verify: LIBVIRT_GATES,
     group: "libvirt",
     outputDir: "virsh",
@@ -342,7 +342,7 @@ export const tools: Tool[] = [
   {
     id: "virt-images",
     label: "Images & VM creation",
-    category: "Virtualization/Virtual_Machines",
+    category: "Virtual_Machines",
     deps: ["wget"],
     verify: [
       ...LIBVIRT_GATES,
@@ -498,7 +498,7 @@ export const tools: Tool[] = [
   {
     id: "virt-net",
     label: "virsh networks",
-    category: "Virtualization/Networking",
+    category: "Networking",
     deps: ["iptables"],
     verify: LIBVIRT_GATES,
     group: "libvirt",
@@ -586,7 +586,7 @@ export const tools: Tool[] = [
   {
     id: "virsh-pools",
     label: "Storage pools & volumes",
-    category: "Virtualization/Storage",
+    category: "Storage",
     verify: LIBVIRT_GATES,
     group: "libvirt",
     outputDir: "virsh",
@@ -691,7 +691,7 @@ export const tools: Tool[] = [
   {
     id: "virsh-host",
     label: "Host & capabilities",
-    category: "Virtualization/Host",
+    category: "Host",
     verify: LIBVIRT_GATES,
     // No `group` gate: everything here is read-only, and libvirt grants
     // org.libvirt.unix.monitor to every local user — a red "not in the libvirt
