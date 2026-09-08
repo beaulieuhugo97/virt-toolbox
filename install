@@ -201,8 +201,11 @@ check_existing() {
     [ "$has_ext" -eq 1 ] && warn "Found the extension already installed in VS Code ($EXT_ID)"
     printf '\n'
     info "To update in place instead, keeping your configuration:"
-    info "  cd $INSTALL_DIR && git pull && npm install && npm run package \\"
-    info "    && code --install-extension $VSIX_NAME --force"
+    info "  In VS Code: the 'Update extension' button on the toolbox home dashboard"
+    info "  (or the cloud icon in the Tools title bar) does all of the below for you."
+    info "  By hand:"
+    info "    cd $INSTALL_DIR && git pull && npm install && npm run package \\"
+    info "      && code --install-extension $VSIX_NAME --force"
     printf '\n'
 
     if ! confirm "Remove the existing installation and reinstall from scratch?" "n"; then
@@ -364,7 +367,8 @@ fetch_repo() {
     mv "/tmp/$GIT_REPO-main" "$INSTALL_DIR"
     rm -f "/tmp/$GIT_REPO.zip"
     ok "Archive downloaded and extracted."
-    warn "Installed from an archive, not a git clone — in-place updates will not work."
+    warn "Installed from an archive, not a git clone — in-place updates will not work,"
+    warn "and neither will the extension's own 'Update extension' button (it pulls a checkout)."
 }
 
 build_and_install_extension() {
@@ -424,8 +428,15 @@ ${C_BOLD}OUTPUT${C_RESET}
     Runs land in ~/.virt-toolbox/outputs/ (virtToolbox.outputsPath to change it).
 
 ${C_BOLD}UPDATE${C_RESET}
-    cd "$INSTALL_DIR" && git pull && npm install && npm run package \\
-      && code --install-extension $VSIX_NAME --force
+    The extension updates itself: click ${C_BOLD}Update extension${C_RESET} on the home dashboard,
+    or the cloud icon in the Tools title bar. It pulls this checkout, rebuilds the
+    VSIX, reinstalls it and offers a reload. It also checks for new commits on
+    startup (every 6h) and badges the Tools view — virtToolbox.checkForUpdatesOnStartup
+    turns that off.
+
+    The same thing by hand:
+      cd "$INSTALL_DIR" && git pull && npm install && npm run package \\
+        && code --install-extension $VSIX_NAME --force
 
 ${C_BOLD}UNINSTALL${C_RESET}
     code --uninstall-extension $EXT_ID && rm -rf "$INSTALL_DIR"
